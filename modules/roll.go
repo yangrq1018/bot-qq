@@ -131,6 +131,37 @@ func (r *roll) startServer(c *client.QQClient, addr string) {
 			members,
 		})
 	})
+	router.GET("/groups", func(writer http.ResponseWriter, request *http.Request, params httprouter.Params) {
+		err := c.ReloadGroupList()
+		if err == nil {
+			groups := make([]struct {
+				Uin             int64
+				Code            int64
+				Name            string
+				OwnerUin        int64
+				GroupCreateTime uint32
+				GroupLevel      uint32
+				MemberCount     uint16
+				MaxMemberCount  uint16
+			}, len(c.GroupList))
+			for i := range c.GroupList {
+				groups[i].Uin = c.GroupList[i].Uin
+				groups[i].Code = c.GroupList[i].Code
+				groups[i].Name = c.GroupList[i].Name
+				groups[i].OwnerUin = c.GroupList[i].OwnerUin
+				groups[i].GroupCreateTime = c.GroupList[i].GroupLevel
+				groups[i].GroupLevel = c.GroupList[i].GroupLevel
+				groups[i].MemberCount = c.GroupList[i].MemberCount
+				groups[i].MaxMemberCount = c.GroupList[i].MaxMemberCount
+			}
+			_ = json.NewEncoder(writer).Encode(&groups)
+			writer.WriteHeader(http.StatusOK)
+			return
+		} else {
+			logger.Error(err)
+			writer.WriteHeader(http.StatusInternalServerError)
+		}
+	})
 	go http.ListenAndServe(addr, router)
 }
 
