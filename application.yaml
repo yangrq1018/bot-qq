@@ -1,0 +1,31 @@
+bot:
+  # 账号
+  account: 1284700603
+  # 密码
+  password:
+  loginmethod: qrcode
+group_codes:
+  - 852485822 # csgo
+  - 1007452144
+save_token: true
+elastic: false
+modules:
+  manage:
+    clear: "0 0 * * *"
+    send: "00 19 * * *"
+    notify_groups:
+      - 852485822
+    emby: http://emby.yangruoqi.site:8096
+    emby_token: 907edf3821ca42528c775f69435fcbec
+    spam_duration: 60s
+    spam_msgs: 20
+    spam_threshold: 0.8
+    mute_duration: 1m
+  roll:
+    group_notice: false
+    at_all: false
+    recall: false
+    addr: ":8083"
+    rate:
+      duration: 10m
+      times: 3

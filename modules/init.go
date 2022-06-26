@@ -1,0 +1,40 @@
+package modules
+
+import (
+	"os"
+
+	"github.com/yangrq1018/botqq/mongodb"
+
+	"github.com/Logiase/MiraiGo-Template/bot"
+	"github.com/Logiase/MiraiGo-Template/config"
+	"github.com/Logiase/MiraiGo-Template/utils"
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+var (
+	logger      = utils.GetModuleLogger("qq.modules")
+	mongoClient *mongo.Client
+)
+
+func init() {
+	// imported packages are initialized before the package itself,
+	// so make sure that config.GlobalConfig is initialized before
+	// reading it
+	if config.GlobalConfig == nil {
+		config.Init()
+	}
+
+	instanceRoll = new(roll)
+	instanceSetu = new(setu)
+	instanceManage = new(manage)
+
+	bot.RegisterModule(instanceRoll)
+	bot.RegisterModule(instanceSetu)
+	bot.RegisterModule(instanceManage)
+
+	_mongoClient, err := mongodb.NewClient(os.Getenv("MONGO_URI"), os.Getenv("MONGO_PROXY"))
+	if err != nil {
+		logger.Errorf("failed to create mongo client: %v", err)
+	}
+	mongoClient = _mongoClient
+}
