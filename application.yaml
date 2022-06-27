@@ -22,7 +22,8 @@ modules:
     spam_threshold: 0.8
     mute_duration: 1m
     files:
-      "ts": "https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-win64-3.5.6.exe"
+      "ts": {url: "https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-win64-3.5.6.exe", msg: "使用安装包安装TS"}
+      "buding": {url: "https://github.com/jitingcn/TS3-Translation_zh-CN/releases/download/snapshot/Chinese_Translation_zh-CN.ts3_translation", msg: "装好TS客户端，再双击安装补丁"}
   roll:
     group_notice: false
     at_all: false

@@ -48,7 +48,12 @@ type manage struct {
 	muteDuration    time.Duration
 	notifyGroups    []int
 	spamMsgInterval int
-	fileDict        map[string]string
+	fileDict        map[string]fileSearch
+}
+
+type fileSearch struct {
+	URL string
+	Msg string
 }
 
 var instanceManage *manage
@@ -66,7 +71,7 @@ func (s *manage) Init() {
 	s.ctx = context.Background()
 	s.database = mongoClient.Database("qq")
 	s.rules = ratelimit.NewRule()
-	s.fileDict = make(map[string]string)
+	s.fileDict = make(map[string]fileSearch)
 
 	moduleConfig := config.GlobalConfig.Sub("modules." + s.MiraiGoModule().ID.Name())
 	if moduleConfig != nil {
@@ -79,8 +84,17 @@ func (s *manage) Init() {
 		s.embyURL = moduleConfig.GetString("emby")
 		s.embyToken = moduleConfig.GetString("emby_token")
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
-		for k, v := range moduleConfig.GetStringMapString("files") {
-			s.fileDict[k] = v
+		for k, v := range moduleConfig.GetStringMap("files") {
+			file := fileSearch{}
+			switch x := v.(type) {
+			case string:
+				file.URL = x
+			case map[string]interface{}:
+				file.URL = x["url"].(string)
+				file.Msg = x["msg"].(string)
+			default:
+			}
+			s.fileDict[k] = file
 		}
 	} else {
 		logger.Warnf("module %s config not found", s.MiraiGoModule().ID.Name())
@@ -321,16 +335,17 @@ func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 	}
 }
 
-func (s *manage) lookUpFileURL(keyword string) string {
-	return s.fileDict[keyword]
+func (s *manage) lookUpFile(keyword string) (fileSearch, bool) {
+	f, ok := s.fileDict[keyword]
+	return f, ok
 }
 
 // TODO: this is subject to pan.qq.come change
 const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
 
 func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword string) error {
-	url := s.lookUpFileURL(keyword)
-	if url == "" {
+	item, ok := s.lookUpFile(keyword)
+	if !ok {
 		logger.Infof("keyword %s does not have a URL associated", keyword)
 		return nil
 	}
@@ -338,7 +353,7 @@ func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword 
 		SourceType: message.SourceGroup,
 		PrimaryID:  groupCode,
 	}
-	res, err := http.Get(url)
+	res, err := http.Get(item.URL)
 	if err != nil {
 		return err
 	}
@@ -349,13 +364,20 @@ func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword 
 		return err
 	}
 
-	tokens := strings.Split(url, "/")
+	tokens := strings.Split(item.URL, "/")
 	file := &client.LocalFile{
 		FileName:     tokens[len(tokens)-1],
 		Body:         bytes.NewReader(data.Bytes()), // maybe the best way to use res.Body as io.ReadSeeker
 		RemoteFolder: remoteFolder,
 	}
-	return c.UploadFile(source, file)
+	err = c.UploadFile(source, file)
+	if err != nil {
+		return err
+	}
+	if item.Msg != "" {
+		c.SendGroupMessage(groupCode, message.NewSendingMessage().Append(message.NewText(item.Msg)))
+	}
+	return nil
 }
 
 // 禁言群组中的该条消息发言成员
