@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +48,7 @@ type manage struct {
 	muteDuration    time.Duration
 	notifyGroups    []int
 	spamMsgInterval int
+	fileDict        map[string]string
 }
 
 var instanceManage *manage
@@ -63,6 +66,7 @@ func (s *manage) Init() {
 	s.ctx = context.Background()
 	s.database = mongoClient.Database("qq")
 	s.rules = ratelimit.NewRule()
+	s.fileDict = make(map[string]string)
 
 	moduleConfig := config.GlobalConfig.Sub("modules." + s.MiraiGoModule().ID.Name())
 	if moduleConfig != nil {
@@ -75,6 +79,9 @@ func (s *manage) Init() {
 		s.embyURL = moduleConfig.GetString("emby")
 		s.embyToken = moduleConfig.GetString("emby_token")
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
+		for k, v := range moduleConfig.GetStringMapString("files") {
+			s.fileDict[k] = v
+		}
 	} else {
 		logger.Warnf("module %s config not found", s.MiraiGoModule().ID.Name())
 	}
@@ -84,7 +91,7 @@ func (s *manage) PostInit() {}
 
 func (s *manage) Serve(bot *bot.Bot) {
 	s.monitorGroups.Each(func(code int64) {
-		registerMessageListener(code, s.handle, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
+		registerMessageListener(code, s.handleCommand, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
 		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
 		registerMessageListener(code, s.antiSpam, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
 	})
@@ -117,38 +124,28 @@ func (s *manage) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 	_ = s.database.Client().Disconnect(s.ctx)
 }
 
-func (s *manage) handle(client *client.QQClient, msg *message.GroupMessage) {
+func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessage) {
 	// 记录msg的发送者
 	s.addCounter(msg.Sender, msg.GroupCode, 1)
 	if s.isBotCommand(msg) {
 		if text := textMessage(msg); text != nil {
-			switch command(text) {
+			cmd, args := command(text)
+			switch cmd {
 			case "/clear":
 			case "/emby":
 				s.creatEmbyUser(client, msg)
 			case "/top":
 				s.sendStat(client, msg.GroupCode, 3)
+			case "/file":
+				if len(args) > 0 {
+					err := s.uploadFileToGroup(client, msg.GroupCode, args[0])
+					if err != nil {
+						logger.Error(err)
+					}
+				}
 			}
 		}
 	}
-}
-
-func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupEvent) {
-	log.Infof("a new member joined group %d", event.Member.Uin)
-	welcomeImage, err := readImageURI(os.Getenv("QQ_GROUP_WELCOME_URI"))
-	if err != nil {
-		log.Errorf("cannot welcome new user, fetch image: %v", err)
-		return
-	}
-
-	msg := pictureMessage(client, event.Group.Code, welcomeImage)
-
-	// break lines into multiple elements to avoid URL getting chunked
-	msg.Append(message.NewText("\n欢迎新人" + event.Member.DisplayName())).
-		Append(message.NewText("\n看置顶公告，加Steam组和完美公会：CN摆烂大队")).
-		Append(message.NewText("\n下载Teamspeak(TS)，参考https://yangruoqi.site/teamspeak")).
-		Append(message.NewText("\n公会跑图社区服，参考https://yangruoqi.site/csgo-server"))
-	client.SendGroupMessage(event.Group.Code, msg)
 }
 
 func (s *manage) makeStatMessage(group *client.GroupInfo, senders []userMessageCount) *message.SendingMessage {
@@ -324,6 +321,43 @@ func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 	}
 }
 
+func (s *manage) lookUpFileURL(keyword string) string {
+	return s.fileDict[keyword]
+}
+
+// TODO: this is subject to pan.qq.come change
+const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
+
+func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword string) error {
+	url := s.lookUpFileURL(keyword)
+	if url == "" {
+		logger.Infof("keyword %s does not have a URL associated", keyword)
+		return nil
+	}
+	source := message.Source{
+		SourceType: message.SourceGroup,
+		PrimaryID:  groupCode,
+	}
+	res, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	data := bytes.NewBuffer(nil)
+	_, err = io.Copy(data, res.Body)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(url, "/")
+	file := &client.LocalFile{
+		FileName:     tokens[len(tokens)-1],
+		Body:         bytes.NewReader(data.Bytes()), // maybe the best way to use res.Body as io.ReadSeeker
+		RemoteFolder: remoteFolder,
+	}
+	return c.UploadFile(source, file)
+}
+
 // 禁言群组中的该条消息发言成员
 func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Duration) error {
 	g, err := client.GetGroupInfo(m.GroupCode)
@@ -337,4 +371,22 @@ func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Du
 	}
 	// in seconds, if less than 60, 1 minute is used
 	return member.Mute(uint32(d.Seconds()))
+}
+
+func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupEvent) {
+	log.Infof("a new member joined group %d", event.Member.Uin)
+	welcomeImage, err := readImageURI(os.Getenv("QQ_GROUP_WELCOME_URI"))
+	if err != nil {
+		log.Errorf("cannot welcome new user, fetch image: %v", err)
+		return
+	}
+
+	msg := pictureMessage(client, event.Group.Code, welcomeImage)
+
+	// break lines into multiple elements to avoid URL getting chunked
+	msg.Append(message.NewText("\n欢迎新人" + event.Member.DisplayName())).
+		Append(message.NewText("\n看置顶公告，加Steam组和完美公会：CN摆烂大队")).
+		Append(message.NewText("\n下载Teamspeak(TS)，参考https://yangruoqi.site/teamspeak")).
+		Append(message.NewText("\n公会跑图社区服，参考https://yangruoqi.site/csgo-server"))
+	client.SendGroupMessage(event.Group.Code, msg)
 }

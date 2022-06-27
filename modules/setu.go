@@ -57,7 +57,8 @@ func (s setu) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 func (s *setu) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	if s.isBotCommand(msg) {
 		if text := textMessage(msg); text != nil {
-			switch command(text) {
+			cmd, _ := command(text)
+			switch cmd {
 			case setuCommand:
 				go func() {
 					if err := handleCmd(client, msg); err != nil {

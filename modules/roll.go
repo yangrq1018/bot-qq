@@ -233,7 +233,8 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	}
 	if r.isBotCommand(msg) {
 		if text := textMessage(msg); text != nil {
-			switch command(text) {
+			cmd, _ := command(text)
+			switch cmd {
 			case rollCommand:
 				go func() {
 					if !r.rule.AllowVisit(msg.Sender.Uin) {

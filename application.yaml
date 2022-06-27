@@ -21,6 +21,8 @@ modules:
     spam_msgs: 20
     spam_threshold: 0.8
     mute_duration: 1m
+    files:
+      "ts": "https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-win64-3.5.6.exe"
   roll:
     group_notice: false
     at_all: false

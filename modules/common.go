@@ -66,15 +66,17 @@ func textMessage(msg *message.GroupMessage) *message.TextElement {
 
 var commandRegexp = regexp.MustCompile(`/\w+`)
 
-func command(element *message.TextElement) string {
-	contentStripped := strings.TrimSpace(element.Content)
-	if strings.HasPrefix(contentStripped, "/") {
-		m := commandRegexp.FindString(contentStripped)
+func command(element *message.TextElement) (string, []string) {
+	var args []string
+	content := strings.TrimSpace(element.Content)
+	if strings.HasPrefix(content, "/") {
+		m := commandRegexp.FindString(content)
 		if m != "" {
-			return m
+			args = strings.Fields(content)
+			return m, args[1:]
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func readImageURI(uri string) (io.ReadSeeker, error) {
