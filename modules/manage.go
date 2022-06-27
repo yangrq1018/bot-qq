@@ -295,18 +295,17 @@ func (s *manage) isSpam(client *client.QQClient, m *message.GroupMessage) bool {
 	}
 	// parameter here
 	history, err := client.GetGroupMessages(m.GroupCode, g.LastMsgSeq-int64(s.spamMsgInterval), g.LastMsgSeq)
+	if err != nil {
+		return false
+	}
 	var from int
 	for _, msg := range history {
 		if msg.Sender.Uin == m.Sender.Uin {
 			from++
 		}
 	}
-	if float64(from)/float64(len(history)) > s.spamThreshold {
-		// 如果超过80%的消息来自一个人，认为是刷屏
-		return true
-	}
-	// 内容相似
-	return false
+	// 如果超过阈值百分比的消息来自一个人，认为刷屏
+	return float64(from)/float64(len(history)) > s.spamThreshold
 }
 
 func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {

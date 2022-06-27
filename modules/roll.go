@@ -210,16 +210,6 @@ func (r *roll) getRoll(groupCode int64, msgID int32) (*rollEvent, bool) {
 	return data.AsEvent(), true
 }
 
-func (r *roll) dropRoll(groupCode int64, msgID int32) {
-	_, err := r.collection().DeleteOne(r.ctx, bson.M{
-		"group_code": groupCode,
-		"msg_id":     msgID,
-	})
-	if err != nil {
-		logger.Errorf("failed to drop roll event: %v", err)
-	}
-}
-
 func (r *roll) collection() *mongo.Collection {
 	return r.database.Collection("csgo")
 }
@@ -264,7 +254,7 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 
 // 返回该qq号是否是一个群的管理员
 func isAdmin(qqc *client.QQClient, groupCode, uin int64) bool {
-	admins := hashset.New[int64](0, generic.Equals[int64], generic.HashInt64)
+	admins := hashset.New(0, generic.Equals[int64], generic.HashInt64)
 	for _, g := range qqc.GroupList {
 		if g.Code == groupCode {
 			for _, member := range g.Members {
@@ -319,7 +309,7 @@ func (m rollEventMongo) AsEvent() *rollEvent {
 
 func newRollEvent() *rollEvent {
 	e := new(rollEvent)
-	e.participants = hashset.New[message.Sender](0, func(a, b message.Sender) bool {
+	e.participants = hashset.New(0, func(a, b message.Sender) bool {
 		return a.Uin == b.Uin
 	}, func(t message.Sender) uint64 {
 		return uint64(t.Uin)
@@ -430,7 +420,7 @@ func parseMessage(msg *message.GroupMessage) *rollEvent {
 
 func (r *roll) drawLater(client *client.QQClient, groupCode int64, event *rollEvent) {
 	// wait until draw time
-	after := event.DrawTime.Sub(time.Now())
+	after := time.Until(event.DrawTime)
 	logger.WithField("identity", event.identity()).
 		WithField("after", after).
 		Infof("draw %q", event.SkinName)

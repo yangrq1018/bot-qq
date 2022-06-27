@@ -3,15 +3,16 @@ package modules
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"regexp"
+	"strings"
+
 	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
 	log "github.com/sirupsen/logrus"
 	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/hashset"
-	"io"
-	"regexp"
-	"strings"
 )
 
 type base struct {
@@ -20,7 +21,7 @@ type base struct {
 }
 
 func (b *base) Init() {
-	b.monitorGroups = hashset.New[int64](0, generic.Equals[int64], generic.HashInt64)
+	b.monitorGroups = hashset.New(0, generic.Equals[int64], generic.HashInt64)
 	for _, code := range config.GlobalConfig.GetIntSlice("group_codes") {
 		b.monitorGroups.Put(int64(code))
 	}
