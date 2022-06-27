@@ -13,8 +13,6 @@ RUN go mod download
 # copy source files
 COPY . /src
 RUN go build -o robot . && mv ./robot /robot
-# generate device.json
-RUN go test -run ^TestGenDevice$ .
 
 FROM alpine:latest
 
