@@ -25,11 +25,11 @@ func init() {
 	}
 
 	instanceRoll = new(roll)
-	instanceSetu = new(setu)
+	instanceErotic = new(erotic)
 	instanceManage = new(manage)
 
 	bot.RegisterModule(instanceRoll)
-	bot.RegisterModule(instanceSetu)
+	bot.RegisterModule(instanceErotic)
 	bot.RegisterModule(instanceManage)
 
 	_mongoClient, err := mongodb.NewClient(os.Getenv("MONGO_URI"), os.Getenv("MONGO_PROXY"))

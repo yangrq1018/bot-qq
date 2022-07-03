@@ -7,15 +7,15 @@ import (
 	"sync"
 
 	"github.com/Logiase/MiraiGo-Template/bot"
+	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
 )
 
-var instanceSetu *setu
+var instanceErotic *erotic
 
 const (
-	setuCommand = "/prpr"
-	loliconURL  = "https://api.lolicon.app/setu/v2"
+	setuCommand = "/erotic"
 )
 
 // pixiv 图片需要代理下载
@@ -25,43 +25,45 @@ var proxiedClient = http.Client{
 	},
 }
 
-type setu struct {
+type erotic struct {
 	base
+	loliconURL string
 }
 
-func (s setu) MiraiGoModule() bot.ModuleInfo {
+func (s erotic) MiraiGoModule() bot.ModuleInfo {
 	return bot.ModuleInfo{
 		ID:       "setu",
-		Instance: instanceSetu,
+		Instance: instanceErotic,
 	}
 }
 
-func (s *setu) Init() {
+func (s *erotic) Init() {
 	s.base.Init()
+	s.loliconURL = config.GlobalConfig.GetString("modules.erotic.url")
 }
 
-func (s setu) PostInit() {}
+func (s erotic) PostInit() {}
 
-func (s *setu) Serve(bot *bot.Bot) {
+func (s *erotic) Serve(bot *bot.Bot) {
 	s.monitorGroups.Each(func(code int64) {
 		registerMessageListener(code, s.dispatch, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
 	})
 }
 
-func (s setu) Start(_ *bot.Bot) {}
+func (s erotic) Start(_ *bot.Bot) {}
 
-func (s setu) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
+func (s erotic) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 	defer wg.Done()
 }
 
-func (s *setu) dispatch(client *client.QQClient, msg *message.GroupMessage) {
+func (s *erotic) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	if s.isBotCommand(msg) {
 		if text := textMessage(msg); text != nil {
 			cmd, _ := command(text)
 			switch cmd {
 			case setuCommand:
 				go func() {
-					if err := handleCmd(client, msg); err != nil {
+					if err := s.handleCmd(client, msg); err != nil {
 						logger.Errorf("%s handle error: %s", setuCommand, err)
 					}
 				}()
@@ -70,8 +72,8 @@ func (s *setu) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	}
 }
 
-func handleCmd(client *client.QQClient, msg *message.GroupMessage) error {
-	res, err := proxiedClient.Get(loliconURL)
+func (s *erotic) handleCmd(client *client.QQClient, msg *message.GroupMessage) error {
+	res, err := proxiedClient.Get(s.loliconURL)
 	if err != nil {
 		return err
 	}

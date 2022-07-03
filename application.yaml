@@ -32,3 +32,5 @@ modules:
     rate:
       duration: 10m
       times: 3
+  erotic:
+    url: "https://api.lolicon.app/setu/v2"

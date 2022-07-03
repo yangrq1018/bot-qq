@@ -366,6 +366,7 @@ func (e *rollEvent) AsMongo() *rollEventMongo {
 		MsgID:          e.MsgId,
 		GroupCode:      e.GroupCode,
 		GroupName:      e.GroupName,
+		Participants:   []message.Sender{},
 	}
 	e.participants.Each(func(sender message.Sender) {
 		e2.Participants = append(e2.Participants, sender)
