@@ -94,7 +94,11 @@ func readImageURI(uri string) (io.ReadSeeker, error) {
 }
 
 func pictureMessage(client *client.QQClient, groupCode int64, data io.ReadSeeker) *message.SendingMessage {
-	image, err := client.UploadGroupImage(groupCode, data)
+	source := message.Source{
+		SourceType: message.SourceGroup,
+		PrimaryID:  groupCode,
+	}
+	image, err := client.UploadImage(source, data)
 	if err != nil {
 		return message.NewSendingMessage().
 			Append(message.NewText(err.Error()))

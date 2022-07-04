@@ -530,9 +530,11 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.GroupMessage) *message.GroupMessage {
 	if msg == nil {
 		text2 := fmt.Sprintf(
-			`确认创建抽奖（来源Web）。即将抽取奖品:%q 
+			`确认创建抽奖（来源Web），回复本条任意内容以参加！
+即将抽取奖品:%q 
 开奖时间:%s
-回复本条任意内容以参加！`, event.SkinName, event.DrawTime.In(time.Local).Format("01月02日 15:04"))
+发起人:%s
+`, event.SkinName, event.DrawTime.In(time.Local).Format("01月02日 15:04"), event.SenderNickname)
 		msg2 := message.NewSendingMessage()
 		if r.atAll {
 			msg2.Append(message.NewAt(0, ""))
@@ -546,9 +548,11 @@ func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.Gr
 		return msg2Res
 	} else {
 		text2 := fmt.Sprintf(
-			`确认创建抽奖。即将抽取奖品:%q 
+			`确认创建抽奖，回复上条消息（精华消息）任意内容以参加！
+即将抽取奖品:%q 
 开奖时间:%s
-回复上条消息任意内容以参加，上条消息！上条消息！上条消息！`, event.SkinName, event.DrawTime.Format("01月02日 15:04"))
+发起人:%s
+`, event.SkinName, event.DrawTime.Format("01月02日 15:04"), event.SenderNickname)
 		msg2 := message.NewSendingMessage()
 		if r.atAll {
 			msg2.Append(message.NewAt(0, ""))
