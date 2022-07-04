@@ -17,6 +17,7 @@ import (
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
 	"github.com/julienschmidt/httprouter"
+	"github.com/yangrq1018/botqq/model"
 	"github.com/yudeguang/ratelimit"
 	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/hashset"
@@ -201,13 +202,13 @@ func (r *roll) getRoll(groupCode int64, msgID int32) (*rollEvent, bool) {
 		logger.Errorf("failed to get roll event: %v", result.Err())
 		return nil, false
 	}
-	var data rollEventMongo
+	var data model.RollEventMongo
 	err := result.Decode(&data)
 	if err != nil {
 		logger.Errorf("failed to decode roll event: %v", err)
 		return nil, false
 	}
-	return data.AsEvent(), true
+	return fromModel(&data), true
 }
 
 func (r *roll) collection() *mongo.Collection {
@@ -280,20 +281,7 @@ type rollEvent struct {
 	_mu            sync.Mutex                   `bson:"-"`
 }
 
-// mongodb digest-able type
-type rollEventMongo struct {
-	SenderID       int64            `bson:"sender_id" json:"qqUIN"`
-	SenderNickname string           `bson:"sender_nickname"`
-	SkinName       string           `bson:"skin_name" json:"skinName"`
-	DrawTime       time.Time        `bson:"draw_time" json:"drawDate"`
-	Source         string           `bson:"source"`
-	MsgID          int32            `bson:"msg_id"`
-	GroupCode      int64            `bson:"group_code"`
-	GroupName      string           `bson:"group_name"`
-	Participants   []message.Sender `bson:"participants"`
-}
-
-func (m rollEventMongo) AsEvent() *rollEvent {
+func fromModel(m *model.RollEventMongo) *rollEvent {
 	r := newRollEvent()
 	r.SenderID = m.SenderID
 	r.SenderNickname = m.SenderNickname
@@ -357,8 +345,8 @@ func (e *rollEvent) identity() bson.M {
 	return bson.M{"group_code": e.GroupCode, "msg_id": e.MsgId}
 }
 
-func (e *rollEvent) AsMongo() *rollEventMongo {
-	e2 := &rollEventMongo{
+func (e *rollEvent) AsMongo() *model.RollEventMongo {
+	e2 := &model.RollEventMongo{
 		SenderID:       e.SenderID,
 		SenderNickname: e.SenderNickname,
 		SkinName:       e.SkinName,
@@ -508,12 +496,12 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 	}()
 	for cs.Next(r.ctx) {
 		var ce changeEvent
-		var re rollEventMongo
+		var re model.RollEventMongo
 		_ = cs.Decode(&ce)
 		err = collection.FindOne(r.ctx, ce.DocumentKey).Decode(&re)
 		if err == nil && re.Source == "web" {
 			logger.Infof("a new web source mongo db document insert: %v", ce.DocumentKey.ID)
-			e := re.AsEvent()
+			e := fromModel(&re)
 			go func() {
 				msg2 := r.notice(bot.QQClient, e, nil)
 				_, err = collection.UpdateOne(r.ctx, ce.DocumentKey, bson.M{"$set": bson.M{"msg_id": msg2.Id}})

@@ -399,7 +399,7 @@ func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupE
 	log.Infof("a new member joined group %d", event.Member.Uin)
 	welcomeImage, err := readImageURI(os.Getenv("QQ_GROUP_WELCOME_URI"))
 	if err != nil {
-		log.Errorf("cannot welcome new user, fetch image: %v", err)
+		log.Errorf("cannot welcome new user, fetch image error : %v", err)
 		return
 	}
 
