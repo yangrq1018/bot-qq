@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,15 +41,16 @@ type manage struct {
 	ctx      context.Context
 	rules    *ratelimit.Rule
 
-	sendTime        string
-	clearTime       string
-	embyURL         string
-	embyToken       string
-	spamThreshold   float64
-	muteDuration    time.Duration
-	notifyGroups    []int
-	spamMsgInterval int
-	fileDict        map[string]fileSearch
+	sendTime         string
+	clearTime        string
+	embyURL          string
+	embyToken        string
+	spamThreshold    float64
+	muteDuration     time.Duration
+	notifyGroups     []int
+	spamMsgInterval  int
+	fileDict         map[string]fileSearch
+	keywordReplyDict map[string]string
 }
 
 type fileSearch struct {
@@ -84,6 +86,7 @@ func (s *manage) Init() {
 		s.embyURL = moduleConfig.GetString("emby")
 		s.embyToken = moduleConfig.GetString("emby_token")
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
+		s.keywordReplyDict = moduleConfig.GetStringMapString("keyword_reply")
 		for k, v := range moduleConfig.GetStringMap("files") {
 			file := fileSearch{}
 			switch x := v.(type) {
@@ -97,7 +100,7 @@ func (s *manage) Init() {
 			s.fileDict[k] = file
 		}
 	} else {
-		logger.Warnf("module %s config not found", s.MiraiGoModule().ID.Name())
+		logger.Fatal("module %s config not loaded", s.MiraiGoModule().ID.Name())
 	}
 }
 
@@ -141,25 +144,44 @@ func (s *manage) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessage) {
 	// 记录msg的发送者
 	s.addCounter(msg.Sender, msg.GroupCode, 1)
-	if s.isBotCommand(msg) {
-		if text := textMessage(msg); text != nil {
-			cmd, args := command(text)
-			switch cmd {
-			case "/clear":
-			case "/emby":
-				s.creatEmbyUser(client, msg)
-			case "/top":
-				s.sendStat(client, msg.GroupCode, 3)
-			case "/file":
-				if len(args) > 0 {
-					err := s.uploadFileToGroup(client, msg.GroupCode, args[0])
-					if err != nil {
-						logger.Error(err)
-					}
+	text := textMessage(msg)
+	if text == nil {
+		return
+	}
+
+	if s.isToBot(msg) {
+		if k, ok := s.containKeyWord(text); ok {
+			replyToGroupMessage(client, msg, s.keywordReplyDict[k])
+			return
+		}
+		cmd, args := command(text)
+		switch cmd {
+		case "/clear":
+		case "/emby":
+			s.creatEmbyUser(client, msg)
+		case "/top":
+			s.sendStat(client, msg.GroupCode, 3)
+		case "/file":
+			if len(args) > 0 {
+				err := s.uploadFileToGroup(client, msg.GroupCode, args[0])
+				if err != nil {
+					logger.Error(err)
 				}
 			}
 		}
 	}
+}
+
+func (s *manage) containKeyWord(text *message.TextElement) (string, bool) {
+	content := strings.ToLower(text.Content)
+	for keyword := range s.keywordReplyDict {
+		// probably regexp here?
+		match := regexp.MustCompile(keyword).FindString(content)
+		if match != "" {
+			return keyword, true
+		}
+	}
+	return "", false
 }
 
 func (s *manage) makeStatMessage(group *client.GroupInfo, senders []userMessageCount) *message.SendingMessage {
@@ -338,6 +360,11 @@ func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 func (s *manage) lookUpFile(keyword string) (fileSearch, bool) {
 	f, ok := s.fileDict[keyword]
 	return f, ok
+}
+
+func (s *manage) lookUpReply(keyword string) (string, bool) {
+	reply, ok := s.keywordReplyDict[keyword]
+	return reply, ok
 }
 
 // TODO: this is subject to pan.qq.come change

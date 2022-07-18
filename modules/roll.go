@@ -112,7 +112,7 @@ func (r *roll) Start(bot *bot.Bot) {
 
 func (r *roll) startServer(c *client.QQClient, addr string) {
 	router := httprouter.New()
-	router.GET("/members/:group", func(writer http.ResponseWriter, request *http.Request, params httprouter.Params) {
+	router.GET("/members/:group", func(writer http.ResponseWriter, _ *http.Request, params httprouter.Params) {
 		groupCode, _ := strconv.Atoi(params.ByName("group"))
 		g, err := c.GetGroupInfo(int64(groupCode))
 		if err != nil {
@@ -132,7 +132,7 @@ func (r *roll) startServer(c *client.QQClient, addr string) {
 			members,
 		})
 	})
-	router.GET("/groups", func(writer http.ResponseWriter, request *http.Request, params httprouter.Params) {
+	router.GET("/groups", func(writer http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		err := c.ReloadGroupList()
 		if err == nil {
 			groups := make([]struct {
@@ -232,7 +232,7 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 			}
 		}
 	}
-	if r.isBotCommand(msg) {
+	if r.isToBot(msg) {
 		if text := textMessage(msg); text != nil {
 			cmd, _ := command(text)
 			switch cmd {

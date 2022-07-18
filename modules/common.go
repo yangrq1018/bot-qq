@@ -33,7 +33,7 @@ func (b *base) Init() {
 
 // 只有@机器人的消息才会认为是发给bot的命令
 // 注意复制消息不会复制底层的AtElement，需要手动输入
-func (b *base) isBotCommand(msg *message.GroupMessage) bool {
+func (b *base) isToBot(msg *message.GroupMessage) bool {
 	for _, elem := range msg.Elements {
 		switch e := elem.(type) {
 		case *message.AtElement:
