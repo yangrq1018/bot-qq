@@ -362,11 +362,6 @@ func (s *manage) lookUpFile(keyword string) (fileSearch, bool) {
 	return f, ok
 }
 
-func (s *manage) lookUpReply(keyword string) (string, bool) {
-	reply, ok := s.keywordReplyDict[keyword]
-	return reply, ok
-}
-
 // TODO: this is subject to pan.qq.come change
 const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
 
