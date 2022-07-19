@@ -109,8 +109,9 @@ func (s *manage) PostInit() {}
 func (s *manage) Serve(bot *bot.Bot) {
 	s.monitorGroups.Each(func(code int64) {
 		registerMessageListener(code, s.handleCommand, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
-		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
 		registerMessageListener(code, s.antiSpam, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
+		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
+		registerGroupMemberLeaveListener(code, handleMemberLeave, &bot.GroupMemberLeaveEvent)
 	})
 }
 
@@ -418,7 +419,7 @@ func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Du
 }
 
 func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupEvent) {
-	log.Infof("a new member joined group %d", event.Member.Uin)
+	log.WithField("uin", event.Member.Uin).Infof("a new member joined")
 	welcomeImage, err := readImageURI(os.Getenv("QQ_GROUP_WELCOME_URI"))
 	if err != nil {
 		log.Errorf("cannot welcome new user, fetch image error : %v", err)
@@ -430,7 +431,13 @@ func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupE
 	// break lines into multiple elements to avoid URL getting chunked
 	msg.Append(message.NewText("\n欢迎新人" + event.Member.DisplayName())).
 		Append(message.NewText("\n看置顶公告，加Steam组和完美公会：CN摆烂大队")).
-		Append(message.NewText("\n下载Teamspeak(TS)，参考https://yangruoqi.site/teamspeak")).
-		Append(message.NewText("\n公会跑图社区服，参考https://yangruoqi.site/csgo-server"))
+		Append(message.NewText("\n下载Teamspeak(TS)，群文件有安装包和中文补丁"))
+	client.SendGroupMessage(event.Group.Code, msg)
+}
+
+func handleMemberLeave(client *client.QQClient, event *client.MemberLeaveGroupEvent) {
+	log.WithField("uin", event.Member.Uin).Infof("a new member leaved")
+	msg := message.NewSendingMessage().
+		Append(message.NewText(event.Member.DisplayName() + "离开了群聊。"))
 	client.SendGroupMessage(event.Group.Code, msg)
 }

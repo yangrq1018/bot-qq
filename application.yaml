@@ -6,7 +6,7 @@ bot:
   loginmethod: qrcode
 group_codes:
   - 852485822 # csgo
-  - 1007452144
+  - 871245015 # 疯狂星期四
 save_token: true
 elastic: false
 modules:
@@ -23,11 +23,14 @@ modules:
     mute_duration: 1m
     keyword_reply:
       "(csgo服务器|(csgo)?社区服)": "控制台: connect csgo.yangruoqi.site; password bailan"
-      "(mc|minecraft)服务器": "多人游戏: mc.yangruoqi.site，无密码，mod文件在群文件里"
+      "(mc|minecraft|Minecraft)服务器": "多人游戏: mc.yangruoqi.site，无密码，mod文件在群文件里"
       "(ts|teamspeak)服务器": "119.23.142.1，服务器问题联系@s1mple"
+      "(方舟仙境|方舟维京|方舟|方舟服务器)": "182.61.17.105:27015，密码bailan"
+      '(kali|群主|Kali)\s*(steam)?(好友)?代码' : "代码是1256694414"
+      '小牛(冲冲)?\s*(steam)?(好友)?代码' : '代码是1129710459'
     files:
       "ts": {url: "https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-win64-3.5.6.exe", msg: "使用安装包安装TS"}
-      "buding": {url: "https://github.com/jitingcn/TS3-Translation_zh-CN/releases/download/snapshot/Chinese_Translation_zh-CN.ts3_translation", msg: "装好TS客户端，再双击安装补丁"}
+      "ts中文补丁": {url: "https://github.com/jitingcn/TS3-Translation_zh-CN/releases/download/snapshot/Chinese_Translation_zh-CN.ts3_translation", msg: "装好TS客户端，再双击安装补丁"}
   roll:
     group_notice: false
     at_all: false

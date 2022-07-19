@@ -108,6 +108,7 @@ func pictureMessage(client *client.QQClient, groupCode int64, data io.ReadSeeker
 
 type groupMessageHandleFunc func(client *client.QQClient, msg *message.GroupMessage)
 type groupMemberJoinHandleFunc func(client *client.QQClient, e *client.MemberJoinGroupEvent)
+type groupMemberLeaveHandleFunc func(client *client.QQClient, e *client.MemberLeaveGroupEvent)
 
 func registerMessageListener(groupCode int64, callback groupMessageHandleFunc, events ...*client.EventHandle[*message.GroupMessage]) {
 	for _, event := range events {
@@ -122,6 +123,16 @@ func registerMessageListener(groupCode int64, callback groupMessageHandleFunc, e
 func registerGroupMemberJoinListener(groupCode int64, callback groupMemberJoinHandleFunc, events ...*client.EventHandle[*client.MemberJoinGroupEvent]) {
 	for _, event := range events {
 		event.Subscribe(func(client *client.QQClient, e *client.MemberJoinGroupEvent) {
+			if e.Group.Code == groupCode {
+				callback(client, e)
+			}
+		})
+	}
+}
+
+func registerGroupMemberLeaveListener(groupCode int64, callback groupMemberLeaveHandleFunc, events ...*client.EventHandle[*client.MemberLeaveGroupEvent]) {
+	for _, event := range events {
+		event.Subscribe(func(client *client.QQClient, e *client.MemberLeaveGroupEvent) {
 			if e.Group.Code == groupCode {
 				callback(client, e)
 			}
