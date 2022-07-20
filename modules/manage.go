@@ -437,7 +437,11 @@ func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupE
 
 func handleMemberLeave(client *client.QQClient, event *client.MemberLeaveGroupEvent) {
 	log.WithField("uin", event.Member.Uin).Infof("a new member leaved")
-	msg := message.NewSendingMessage().
-		Append(message.NewText(event.Member.DisplayName() + "离开了群聊。"))
+	msg := message.NewSendingMessage()
+	if event.Operator != nil {
+		msg.Append(message.NewText("成员【" + event.Member.DisplayName() + "】被" + event.Operator.DisplayName() + "踢出群聊。"))
+	} else {
+		msg.Append(message.NewText("成员【" + event.Member.DisplayName() + "】离开了群聊。"))
+	}
 	client.SendGroupMessage(event.Group.Code, msg)
 }
