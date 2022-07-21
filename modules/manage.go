@@ -20,9 +20,10 @@ import (
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
 	"github.com/go-co-op/gocron"
-	log "github.com/sirupsen/logrus"
 	"github.com/yangrq1018/botqq/utils"
 	"github.com/yudeguang/ratelimit"
+	"github.com/zyedidia/generic"
+	"github.com/zyedidia/generic/hashset"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -35,22 +36,33 @@ type userMessageCount struct {
 	Count     int64  `bson:"count"`
 }
 
+type perfectWorldAccount struct {
+	Account       string `bson:"account"`
+	Password      string `bson:"password"`
+	Email         string `bson:"email"`
+	EmailPassword string `bson:"emailPassword"`
+	EmailSite     string `bson:"emailSite"`
+	Mobile        string `bson:"mobile"`
+}
+
 type manage struct {
 	base
 	database *mongo.Database
 	ctx      context.Context
 	rules    *ratelimit.Rule
 
-	sendTime         string
-	clearTime        string
-	embyURL          string
-	embyToken        string
-	spamThreshold    float64
-	muteDuration     time.Duration
-	notifyGroups     []int
-	spamMsgInterval  int
-	fileDict         map[string]fileSearch
-	keywordReplyDict map[string]string
+	sendTime             string
+	clearTime            string
+	embyURL              string
+	embyToken            string
+	spamThreshold        float64
+	muteDuration         time.Duration // TODO dynamic mute duration
+	notifyGroups         []int
+	spamMsgInterval      int
+	approveFriendRequest bool
+	fileDict             map[string]fileSearch
+	keywordReplyDict     map[string]string
+	privateChatList      *hashset.Set[int64] // write once, no lock protected
 }
 
 type fileSearch struct {
@@ -74,7 +86,7 @@ func (s *manage) Init() {
 	s.database = mongoClient.Database("qq")
 	s.rules = ratelimit.NewRule()
 	s.fileDict = make(map[string]fileSearch)
-
+	s.privateChatList = hashset.New(100, generic.Equals[int64], generic.HashInt64)
 	moduleConfig := config.GlobalConfig.Sub("modules." + s.MiraiGoModule().ID.Name())
 	if moduleConfig != nil {
 		s.spamMsgInterval = moduleConfig.GetInt("spam_msgs")
@@ -87,6 +99,10 @@ func (s *manage) Init() {
 		s.embyToken = moduleConfig.GetString("emby_token")
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
 		s.keywordReplyDict = moduleConfig.GetStringMapString("keyword_reply")
+		s.approveFriendRequest = moduleConfig.GetBool("approve_friend_request")
+		for _, u := range moduleConfig.GetIntSlice("private_chat_list") {
+			s.privateChatList.Put(int64(u))
+		}
 		for k, v := range moduleConfig.GetStringMap("files") {
 			file := fileSearch{}
 			switch x := v.(type) {
@@ -113,6 +129,19 @@ func (s *manage) Serve(bot *bot.Bot) {
 		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
 		registerGroupMemberLeaveListener(code, handleMemberLeave, &bot.GroupMemberLeaveEvent)
 	})
+
+	registerPrivateMessageListener(s.handlePrivate, &bot.PrivateMessageEvent, &bot.SelfPrivateMessageEvent)
+	// TODO: in-group non-friend chat message won't work
+	registerTempMessageListener(s.handleTemp, &bot.TempMessageEvent)
+
+	// 自动通过好友申请
+	if s.approveFriendRequest {
+		logger.Info("好友申请自动通过：启动")
+		bot.NewFriendRequestEvent.Subscribe(func(client *client.QQClient, req *client.NewFriendRequest) {
+			logger.Infof("approve friend request from %s", req.RequesterNick)
+			req.Accept()
+		})
+	}
 }
 
 func (s *manage) Start(bot *bot.Bot) {
@@ -145,7 +174,7 @@ func (s *manage) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessage) {
 	// 记录msg的发送者
 	s.addCounter(msg.Sender, msg.GroupCode, 1)
-	text := textMessage(msg)
+	text := textOfGroupMessage(msg)
 	if text == nil {
 		return
 	}
@@ -171,6 +200,74 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 			}
 		}
 	}
+}
+
+var pfRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
+
+func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Sender, txt *message.TextElement) {
+	if s.canPrivateChat(sender) {
+		tokens := pfRegex.FindStringSubmatch(txt.Content)
+		if tokens == nil {
+			return
+		}
+		match, seq := tokens[0], tokens[2]
+		accounts, err := s.getPerfectWorldAccounts()
+		if err != nil {
+			logger.Error(err)
+			return
+		}
+		if match == "完美账号" {
+			msg := message.NewSendingMessage().
+				Append(message.NewText("从下列账号中选择一个，发送“完美” + 【序号】，如“完美1”\n"))
+			for i := range accounts {
+				msg.Append(message.NewText(
+					fmt.Sprintf("[%d]%s\n", i+1, accounts[i].Mobile),
+				))
+			}
+			client.SendPrivateMessage(sender.Uin, msg)
+		} else if seq != "" {
+			seqNum, err := strconv.Atoi(seq)
+			if err != nil {
+				return
+			}
+			seqNum--
+			if seqNum >= len(accounts) {
+				return
+			}
+			a := accounts[seqNum]
+			msg := message.NewSendingMessage()
+
+			msg.Append(message.NewText(fmt.Sprintf(
+				`账号:%s
+密码:%s
+邮箱:%s
+邮箱密码:%s
+邮箱网址:%s
+手机号:%s`,
+				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile)))
+			client.SendPrivateMessage(sender.Uin, msg)
+		}
+	}
+}
+
+func (s *manage) handlePrivate(client *client.QQClient, e *message.PrivateMessage) {
+	txt := textOfPrivateMessage(e)
+	if txt == nil {
+		return
+	}
+	s.handlePrivateOrTemp(client, e.Sender, txt)
+}
+
+func (s *manage) handleTemp(client *client.QQClient, e *client.TempMessageEvent) {
+	txt := textOfTempMessage(e)
+	if txt == nil {
+		return
+	}
+	s.handlePrivateOrTemp(client, e.Message.Sender, txt)
+}
+
+func (s *manage) canPrivateChat(sender *message.Sender) bool {
+	return s.privateChatList.Has(int64(sender.Uin))
 }
 
 func (s *manage) containKeyWord(text *message.TextElement) (string, bool) {
@@ -239,6 +336,19 @@ func (s *manage) addCounter(sender *message.Sender, groupCode, i int64) {
 	if err != nil {
 		logger.Error(err)
 	}
+}
+
+func (s *manage) getPerfectWorldAccounts() ([]perfectWorldAccount, error) {
+	cur, err := s.database.Collection("perfectworld").
+		Find(s.ctx, bson.D{}, options.Find().SetSort(bson.M{"mobile": 1}))
+	if err != nil {
+		return nil, err
+	}
+	var accounts []perfectWorldAccount
+	if err = cur.All(s.ctx, &accounts); err != nil {
+		return nil, err
+	}
+	return accounts, nil
 }
 
 func (s *manage) top(groupCode, n int64) ([]userMessageCount, error) {
@@ -419,10 +529,10 @@ func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Du
 }
 
 func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupEvent) {
-	log.WithField("uin", event.Member.Uin).Infof("a new member joined")
+	logger.WithField("uin", event.Member.Uin).Infof("a new member joined")
 	welcomeImage, err := readImageURI(os.Getenv("QQ_GROUP_WELCOME_URI"))
 	if err != nil {
-		log.Errorf("cannot welcome new user, fetch image error : %v", err)
+		logger.Errorf("cannot welcome new user, fetch image error : %v", err)
 		return
 	}
 
@@ -436,7 +546,7 @@ func handleNewMemberJoin(client *client.QQClient, event *client.MemberJoinGroupE
 }
 
 func handleMemberLeave(client *client.QQClient, event *client.MemberLeaveGroupEvent) {
-	log.WithField("uin", event.Member.Uin).Infof("a new member leaved")
+	logger.WithField("uin", event.Member.Uin).Infof("a new member leaved")
 	msg := message.NewSendingMessage()
 	if event.Operator != nil {
 		msg.Append(message.NewText("成员【" + event.Member.DisplayName() + "】被" + event.Operator.DisplayName() + "踢出群聊。"))

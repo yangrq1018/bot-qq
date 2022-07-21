@@ -233,7 +233,7 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 		}
 	}
 	if r.isToBot(msg) {
-		if text := textMessage(msg); text != nil {
+		if text := textOfGroupMessage(msg); text != nil {
 			cmd, _ := command(text)
 			switch cmd {
 			case rollCommand:
@@ -370,7 +370,7 @@ func parseMessage(msg *message.GroupMessage) *rollEvent {
 	event.GroupCode = msg.GroupCode
 	event.GroupName = msg.GroupName
 
-	content := textMessage(msg).Content
+	content := textOfGroupMessage(msg).Content
 	// use scanner for consistency across platforms
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	var i int // line number

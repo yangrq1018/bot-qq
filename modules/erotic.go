@@ -58,7 +58,7 @@ func (s erotic) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 
 func (s *erotic) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	if s.isToBot(msg) {
-		if text := textMessage(msg); text != nil {
+		if text := textOfGroupMessage(msg); text != nil {
 			cmd, _ := command(text)
 			switch cmd {
 			case setuCommand:

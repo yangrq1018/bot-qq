@@ -46,12 +46,10 @@ func (b *base) isToBot(msg *message.GroupMessage) bool {
 	return false
 }
 
-// 选出一个文字消息元素, nil if none
-// 对于有unicode表情元素的，消息会被切割成多个*message.TextElement，将其合并成一个
-func textMessage(msg *message.GroupMessage) *message.TextElement {
+func searchForTextElement(elements []message.IMessageElement) *message.TextElement {
 	te := new(message.TextElement)
 	var found bool
-	for _, elem := range msg.Elements {
+	for _, elem := range elements {
 		switch e := elem.(type) {
 		case *message.TextElement:
 			found = true
@@ -62,6 +60,20 @@ func textMessage(msg *message.GroupMessage) *message.TextElement {
 		return te
 	}
 	return nil
+}
+
+// 选出一个文字消息元素, nil if none
+// 对于有unicode表情元素的，消息会被切割成多个*message.TextElement，将其合并成一个
+func textOfGroupMessage(msg *message.GroupMessage) *message.TextElement {
+	return searchForTextElement(msg.Elements)
+}
+
+func textOfPrivateMessage(msg *message.PrivateMessage) *message.TextElement {
+	return searchForTextElement(msg.Elements)
+}
+
+func textOfTempMessage(msg *client.TempMessageEvent) *message.TextElement {
+	return searchForTextElement(msg.Message.Elements)
 }
 
 var commandRegexp = regexp.MustCompile(`/\w+`)
@@ -106,9 +118,11 @@ func pictureMessage(client *client.QQClient, groupCode int64, data io.ReadSeeker
 	return message.NewSendingMessage().Append(image)
 }
 
-type groupMessageHandleFunc func(client *client.QQClient, msg *message.GroupMessage)
+type groupMessageHandleFunc func(client *client.QQClient, e *message.GroupMessage)
 type groupMemberJoinHandleFunc func(client *client.QQClient, e *client.MemberJoinGroupEvent)
 type groupMemberLeaveHandleFunc func(client *client.QQClient, e *client.MemberLeaveGroupEvent)
+type privateMessageHandleFunc func(client *client.QQClient, e *message.PrivateMessage)
+type tempMessageHandleFunc func(client *client.QQClient, e *client.TempMessageEvent)
 
 func registerMessageListener(groupCode int64, callback groupMessageHandleFunc, events ...*client.EventHandle[*message.GroupMessage]) {
 	for _, event := range events {
@@ -136,6 +150,22 @@ func registerGroupMemberLeaveListener(groupCode int64, callback groupMemberLeave
 			if e.Group.Code == groupCode {
 				callback(client, e)
 			}
+		})
+	}
+}
+
+func registerPrivateMessageListener(callback privateMessageHandleFunc, events ...*client.EventHandle[*message.PrivateMessage]) {
+	for _, event := range events {
+		event.Subscribe(func(client *client.QQClient, msg *message.PrivateMessage) {
+			callback(client, msg)
+		})
+	}
+}
+
+func registerTempMessageListener(callback tempMessageHandleFunc, events ...*client.EventHandle[*client.TempMessageEvent]) {
+	for _, event := range events {
+		event.Subscribe(func(client *client.QQClient, msg *client.TempMessageEvent) {
+			callback(client, msg)
 		})
 	}
 }
