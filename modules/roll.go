@@ -183,29 +183,13 @@ func replyMessage(msg *message.GroupMessage) *message.ReplyElement {
 }
 
 func (r *roll) persistRoll(event *rollEvent) {
-	_, err := r.collection().InsertOne(r.ctx, event.AsMongo())
-	if err != nil {
-		logger.Errorf("failed to persist roll event: %v", err)
-	}
+	event.Model().Insert(r.ctx, r.collection())
 }
 
 func (r *roll) getRoll(groupCode int64, msgID int32) (*rollEvent, bool) {
-	result := r.collection().FindOne(r.ctx, bson.M{
-		"group_code": groupCode,
-		"msg_id":     msgID,
-	})
-	switch result.Err() {
-	case nil:
-	case mongo.ErrNoDocuments:
-		return nil, false
-	default:
-		logger.Errorf("failed to get roll event: %v", result.Err())
-		return nil, false
-	}
-	var data model.RollEventMongo
-	err := result.Decode(&data)
-	if err != nil {
-		logger.Errorf("failed to decode roll event: %v", err)
+	var data model.MongoEvent
+	err, ok := data.Find(r.ctx, r.collection(), groupCode, msgID)
+	if !ok || err != nil {
 		return nil, false
 	}
 	return fromModel(&data), true
@@ -224,7 +208,7 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 		// 确认回复对象是发起roll的消息
 		if re, ok := r.getRoll(msg.GroupCode, reply.ReplySeq); ok {
 			if !re.participants.Has(*msg.Sender) {
-				r.appendParticipant(re, *msg.Sender)
+				re.Model().AddParticipant(r.ctx, r.collection(), *msg.Sender)
 				logger.Infof("add a participant %s, current # of participants %d", msg.Sender.DisplayName(), re.participants.Size()+1)
 				replyToGroupMessage(client, msg, msg.Sender.DisplayName()+"已加入抽奖")
 			} else {
@@ -281,13 +265,13 @@ type rollEvent struct {
 	_mu            sync.Mutex                   `bson:"-"`
 }
 
-func fromModel(m *model.RollEventMongo) *rollEvent {
+func fromModel(m *model.MongoEvent) *rollEvent {
 	r := newRollEvent()
 	r.SenderID = m.SenderID
 	r.SenderNickname = m.SenderNickname
 	r.SkinName = m.SkinName
 	r.DrawTime = m.DrawTime
-	r.MsgId = m.MsgID
+	r.MsgId = m.MsgId
 	r.GroupCode = m.GroupCode
 	r.GroupName = m.GroupName
 	for _, p := range m.Participants {
@@ -345,13 +329,13 @@ func (e *rollEvent) identity() bson.M {
 	return bson.M{"group_code": e.GroupCode, "msg_id": e.MsgId}
 }
 
-func (e *rollEvent) AsMongo() *model.RollEventMongo {
-	e2 := &model.RollEventMongo{
+func (e *rollEvent) Model() *model.MongoEvent {
+	e2 := &model.MongoEvent{
 		SenderID:       e.SenderID,
 		SenderNickname: e.SenderNickname,
 		SkinName:       e.SkinName,
 		DrawTime:       e.DrawTime,
-		MsgID:          e.MsgId,
+		MsgId:          e.MsgId,
 		GroupCode:      e.GroupCode,
 		GroupName:      e.GroupName,
 		Participants:   []message.Sender{},
@@ -362,6 +346,7 @@ func (e *rollEvent) AsMongo() *model.RollEventMongo {
 	return e2
 }
 
+// msg is assumed to contain text element(s)
 func parseMessage(msg *message.GroupMessage) *rollEvent {
 	event := newRollEvent()
 	event.MsgId = msg.Id
@@ -430,13 +415,7 @@ func (r *roll) drawLater(client *client.QQClient, groupCode int64, event *rollEv
 	}
 	winner := event.Draw()
 	logger.Infof("draw a winner: %d(%s)", winner.Uin, winner.DisplayName())
-	_, err := r.collection().UpdateOne(r.ctx,
-		e.identity(),
-		bson.M{"$set": bson.D{{"winner", winner}}},
-	)
-	if err != nil {
-		logger.Error(err)
-	}
+	e.Model().UpdateWinner(r.ctx, r.collection(), winner)
 	client.SendGroupMessage(groupCode, event.noticeRollWinnerMessage(winner))
 }
 
@@ -455,16 +434,6 @@ func (r *roll) rollCSGOSkin(client *client.QQClient, msg *message.GroupMessage) 
 	logger.WithField("event", event).Infof("roll event created")
 	r.drawLater(client, msg.GroupCode, event)
 	return nil
-}
-
-func (r *roll) appendParticipant(re *rollEvent, p message.Sender) {
-	_, err := r.collection().UpdateOne(r.ctx,
-		re.identity(),
-		bson.M{"$push": bson.M{"participants": p}},
-	)
-	if err != nil {
-		logger.Errorf("failed to append participants: %v", err)
-	}
 }
 
 // This is an example change event struct for inserts.
@@ -496,7 +465,7 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 	}()
 	for cs.Next(r.ctx) {
 		var ce changeEvent
-		var re model.RollEventMongo
+		var re model.MongoEvent
 		_ = cs.Decode(&ce)
 		err = collection.FindOne(r.ctx, ce.DocumentKey).Decode(&re)
 		if err == nil && re.Source == "web" {
