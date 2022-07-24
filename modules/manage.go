@@ -29,6 +29,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// TODO: this is subject to pan.qq.come change
+const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
+
+var instanceManage *manage
+var pfRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
+
 type userMessageCount struct {
 	Uin       int64  `bson:"uin"`
 	GroupCode int64  `bson:"group_code"`
@@ -70,7 +76,7 @@ type fileSearch struct {
 	Msg string
 }
 
-var instanceManage *manage
+// public methods
 
 func (s *manage) MiraiGoModule() bot.ModuleInfo {
 	return bot.ModuleInfo{
@@ -142,6 +148,17 @@ func (s *manage) Serve(bot *bot.Bot) {
 			req.Accept()
 		})
 	}
+
+	bot.GroupMemberPermissionChangedEvent.Subscribe(func(client *client.QQClient, event *client.MemberPermissionChangedEvent) {
+		old, new := utils.PermissionString(event.OldPermission), utils.PermissionString(event.NewPermission)
+		client.SendGroupMessage(event.Group.Code, message.NewSendingMessage().Append(
+			message.NewText(fmt.Sprintf(`【%s】的权限从%s被修改为%s`,
+				event.Member.DisplayName(),
+				old,
+				new,
+			)),
+		))
+	})
 }
 
 func (s *manage) Start(bot *bot.Bot) {
@@ -170,6 +187,8 @@ func (s *manage) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 	defer wg.Done()
 	_ = s.database.Client().Disconnect(s.ctx)
 }
+
+// private methods start here
 
 func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessage) {
 	// 记录msg的发送者
@@ -201,8 +220,6 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 		}
 	}
 }
-
-var pfRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
 
 func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Sender, txt *message.TextElement) {
 	if s.canPrivateChat(sender) {
@@ -473,9 +490,6 @@ func (s *manage) lookUpFile(keyword string) (fileSearch, bool) {
 	return f, ok
 }
 
-// TODO: this is subject to pan.qq.come change
-const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
-
 func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword string) error {
 	item, ok := s.lookUpFile(keyword)
 	if !ok {
@@ -512,6 +526,8 @@ func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword 
 	}
 	return nil
 }
+
+// helper functions
 
 // 禁言群组中的该条消息发言成员
 func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Duration) error {

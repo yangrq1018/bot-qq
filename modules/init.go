@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	logger      = utils.GetModuleLogger("qq.modules")
+	logger      = utils.GetModuleLogger("qq")
 	mongoClient *mongo.Client
 )
 
