@@ -18,6 +18,7 @@ func init() {
 func main() {
 	// 快速初始化
 	bot.Init()
+	config.GlobalConfig.WatchConfig()
 
 	// 初始化 Modules
 	bot.StartService()

@@ -19,10 +19,10 @@ import (
 	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-co-op/gocron"
 	"github.com/yangrq1018/botqq/utils"
 	"github.com/yudeguang/ratelimit"
-	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/hashset"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -69,6 +69,7 @@ type manage struct {
 	fileDict             map[string]fileSearch
 	keywordReplyDict     map[string]string
 	privateChatList      *hashset.Set[int64] // write once, no lock protected
+	configLock           sync.Mutex
 }
 
 type fileSearch struct {
@@ -92,8 +93,19 @@ func (s *manage) Init() {
 	s.database = mongoClient.Database("qq")
 	s.rules = ratelimit.NewRule()
 	s.fileDict = make(map[string]fileSearch)
-	s.privateChatList = hashset.New(100, generic.Equals[int64], generic.HashInt64)
-	moduleConfig := config.GlobalConfig.Sub("modules." + s.MiraiGoModule().ID.Name())
+	moduleName := s.MiraiGoModule().ID.Name()
+	moduleConfig := config.GlobalConfig.Sub("modules." + moduleName)
+	s.privateChatList = utils.Int64Set(moduleConfig.GetIntSlice("private_chat_list"))
+
+	// the call must be before WatchConfig()
+	config.GlobalConfig.OnConfigChange(func(in fsnotify.Event) {
+		logger.Infof("the config file has changed, name=%s", in.Name)
+		s.configLock.Lock()
+		s.privateChatList = utils.Int64Set(config.GlobalConfig.GetIntSlice("modules." + moduleName + ".private_chat_list"))
+		s.configLock.Unlock()
+		logger.Infof("# of member in private chat list: %d", s.privateChatList.Size())
+	})
+
 	if moduleConfig != nil {
 		s.spamMsgInterval = moduleConfig.GetInt("spam_msgs")
 		s.rules.AddRule(moduleConfig.GetDuration("spam_duration"), s.spamMsgInterval)
@@ -106,9 +118,6 @@ func (s *manage) Init() {
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
 		s.keywordReplyDict = moduleConfig.GetStringMapString("keyword_reply")
 		s.approveFriendRequest = moduleConfig.GetBool("approve_friend_request")
-		for _, u := range moduleConfig.GetIntSlice("private_chat_list") {
-			s.privateChatList.Put(int64(u))
-		}
 		for k, v := range moduleConfig.GetStringMap("files") {
 			file := fileSearch{}
 			switch x := v.(type) {
@@ -284,6 +293,8 @@ func (s *manage) handleTemp(client *client.QQClient, e *client.TempMessageEvent)
 }
 
 func (s *manage) canPrivateChat(sender *message.Sender) bool {
+	s.configLock.Lock()
+	defer s.configLock.Unlock()
 	return s.privateChatList.Has(int64(sender.Uin))
 }
 

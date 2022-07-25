@@ -24,8 +24,6 @@ func init() {
 		config.Init()
 	}
 
-	config.GlobalConfig.WatchConfig()
-
 	instanceRoll = new(roll)
 	instanceErotic = new(erotic)
 	instanceManage = new(manage)
