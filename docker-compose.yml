@@ -2,6 +2,9 @@ version: '3'
 services:
   robot:
     container_name: "qq-bot-instance"
+    working_dir: "/etc/bot"
+    volumes:
+      - "/home/xlc1/bot-config:/etc/bot/config"
     ports:
       - "8083:8083"
     environment:

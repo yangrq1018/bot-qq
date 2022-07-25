@@ -6,7 +6,6 @@ bot:
   loginmethod: qrcode
 group_codes:
   - 852485822 # csgo
-  - 871245015 # 疯狂星期四
 save_token: true
 modules:
   manage:
