@@ -18,6 +18,7 @@ import (
 	"github.com/Mrs4s/MiraiGo/message"
 	"github.com/julienschmidt/httprouter"
 	"github.com/yangrq1018/botqq/model"
+	"github.com/yangrq1018/botqq/utils"
 	"github.com/yudeguang/ratelimit"
 	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/hashset"
@@ -200,7 +201,7 @@ func (r *roll) collection() *mongo.Collection {
 }
 
 func replyToGroupMessage(client *client.QQClient, msg *message.GroupMessage, text string) {
-	client.SendGroupMessage(msg.GroupCode, message.NewSendingMessage().Append(message.NewText(text)))
+	client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage(text))
 }
 
 func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {

@@ -11,6 +11,7 @@ import (
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
 	log "github.com/sirupsen/logrus"
+	"github.com/yangrq1018/botqq/utils"
 	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/hashset"
 )
@@ -112,8 +113,7 @@ func pictureMessage(client *client.QQClient, groupCode int64, data io.ReadSeeker
 	}
 	image, err := client.UploadImage(source, data)
 	if err != nil {
-		return message.NewSendingMessage().
-			Append(message.NewText(err.Error()))
+		return utils.NewTextMessage(err.Error())
 	}
 	return message.NewSendingMessage().Append(image)
 }
@@ -123,6 +123,7 @@ type groupMemberJoinHandleFunc func(client *client.QQClient, e *client.MemberJoi
 type groupMemberLeaveHandleFunc func(client *client.QQClient, e *client.MemberLeaveGroupEvent)
 type privateMessageHandleFunc func(client *client.QQClient, e *message.PrivateMessage)
 type tempMessageHandleFunc func(client *client.QQClient, e *client.TempMessageEvent)
+type groupMessageRecallHandleFunc func(client *client.QQClient, e *client.GroupMessageRecalledEvent)
 
 func registerMessageListener(groupCode int64, callback groupMessageHandleFunc, events ...*client.EventHandle[*message.GroupMessage]) {
 	for _, event := range events {
@@ -168,4 +169,12 @@ func registerTempMessageListener(callback tempMessageHandleFunc, events ...*clie
 			callback(client, msg)
 		})
 	}
+}
+
+func registerGroupMessageRecallListener(groupCode int64, callback groupMessageRecallHandleFunc, event *client.EventHandle[*client.GroupMessageRecalledEvent]) {
+	event.Subscribe(func(client *client.QQClient, e *client.GroupMessageRecalledEvent) {
+		if e.GroupCode == groupCode {
+			callback(client, e)
+		}
+	})
 }

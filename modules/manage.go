@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	cache "github.com/Code-Hex/go-generics-cache"
 	"github.com/Logiase/MiraiGo-Template/bot"
 	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Mrs4s/MiraiGo/client"
@@ -63,6 +64,7 @@ type manage struct {
 	embyToken            string
 	spamThreshold        float64
 	muteDuration         time.Duration // TODO dynamic mute duration
+	messageCacheTime     time.Duration
 	notifyGroups         []int
 	spamMsgInterval      int
 	approveFriendRequest bool
@@ -70,6 +72,9 @@ type manage struct {
 	keywordReplyDict     map[string]string
 	privateChatList      *hashset.Set[int64] // write once, no lock protected
 	configLock           sync.Mutex
+	messageCache         *cache.Cache[int32, *message.GroupMessage]
+	lastRecallMessage    *message.GroupMessage
+	_lastRecallMessageMu sync.Mutex
 }
 
 type fileSearch struct {
@@ -96,6 +101,7 @@ func (s *manage) Init() {
 	moduleName := s.MiraiGoModule().ID.Name()
 	moduleConfig := config.GlobalConfig.Sub("modules." + moduleName)
 	s.privateChatList = utils.Int64Set(moduleConfig.GetIntSlice("private_chat_list"))
+	s.messageCache = cache.New[int32, *message.GroupMessage]()
 
 	// the call must be before WatchConfig()
 	config.GlobalConfig.OnConfigChange(func(in fsnotify.Event) {
@@ -116,6 +122,7 @@ func (s *manage) Init() {
 		s.embyURL = moduleConfig.GetString("emby")
 		s.embyToken = moduleConfig.GetString("emby_token")
 		s.notifyGroups = moduleConfig.GetIntSlice("notify_groups")
+		s.messageCacheTime = moduleConfig.GetDuration("message_cache_time")
 		s.keywordReplyDict = moduleConfig.GetStringMapString("keyword_reply")
 		s.approveFriendRequest = moduleConfig.GetBool("approve_friend_request")
 		for k, v := range moduleConfig.GetStringMap("files") {
@@ -141,6 +148,7 @@ func (s *manage) Serve(bot *bot.Bot) {
 	s.monitorGroups.Each(func(code int64) {
 		registerMessageListener(code, s.handleCommand, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
 		registerMessageListener(code, s.antiSpam, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
+		registerGroupMessageRecallListener(code, s.listenRecall, &bot.GroupMessageRecalledEvent)
 		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
 		registerGroupMemberLeaveListener(code, handleMemberLeave, &bot.GroupMemberLeaveEvent)
 	})
@@ -160,13 +168,11 @@ func (s *manage) Serve(bot *bot.Bot) {
 
 	bot.GroupMemberPermissionChangedEvent.Subscribe(func(client *client.QQClient, event *client.MemberPermissionChangedEvent) {
 		old, new := utils.PermissionString(event.OldPermission), utils.PermissionString(event.NewPermission)
-		client.SendGroupMessage(event.Group.Code, message.NewSendingMessage().Append(
-			message.NewText(fmt.Sprintf(`【%s】的权限从%s被修改为%s`,
-				event.Member.DisplayName(),
-				old,
-				new,
-			)),
-		))
+		client.SendGroupMessage(event.Group.Code, utils.NewTextMessage(fmt.Sprintf(`【%s】的权限从%s被修改为%s`,
+			event.Member.DisplayName(),
+			old,
+			new,
+		)))
 	})
 }
 
@@ -207,6 +213,8 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 		return
 	}
 
+	s.messageCache.Set(msg.Id, msg, cache.WithExpiration(s.messageCacheTime))
+
 	if s.isToBot(msg) {
 		if k, ok := s.containKeyWord(text); ok {
 			replyToGroupMessage(client, msg, s.keywordReplyDict[k])
@@ -226,6 +234,19 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 					logger.Error(err)
 				}
 			}
+		case "/recall":
+			s._lastRecallMessageMu.Lock()
+			if s.lastRecallMessage != nil {
+				m := s.lastRecallMessage
+				mTime := time.Unix(int64(m.Time), 0)
+				client.SendGroupMessage(m.GroupCode,
+					utils.NewTextMessage(
+						fmt.Sprintf("%s前，%s撤回了消息: %q",
+							time.Since(mTime),
+							m.Sender.DisplayName(),
+							textOfGroupMessage(m).Content)))
+			}
+			s._lastRecallMessageMu.Unlock()
 		}
 	}
 }
@@ -243,8 +264,7 @@ func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Se
 			return
 		}
 		if match == "完美账号" {
-			msg := message.NewSendingMessage().
-				Append(message.NewText("从下列账号中选择一个，发送“完美” + 【序号】，如“完美1”\n"))
+			msg := utils.NewTextMessage("从下列账号中选择一个，发送“完美” + 【序号】，如“完美1”\n")
 			for i := range accounts {
 				msg.Append(message.NewText(
 					fmt.Sprintf("[%d]%s\n", i+1, accounts[i].Mobile),
@@ -261,16 +281,14 @@ func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Se
 				return
 			}
 			a := accounts[seqNum]
-			msg := message.NewSendingMessage()
-
-			msg.Append(message.NewText(fmt.Sprintf(
+			msg := utils.NewTextMessage(fmt.Sprintf(
 				`账号:%s
 密码:%s
 邮箱:%s
 邮箱密码:%s
 邮箱网址:%s
 手机号:%s`,
-				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile)))
+				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile))
 			client.SendPrivateMessage(sender.Uin, msg)
 		}
 	}
@@ -328,7 +346,7 @@ func (s *manage) sendStat(c *client.QQClient, groupCode int64, n int64) {
 	senders, err := s.top(groupCode, n)
 	if err != nil {
 		logger.Error(err)
-		c.SendGroupMessage(groupCode, utils.TextMessage(err.Error()))
+		c.SendGroupMessage(groupCode, utils.NewTextMessage(err.Error()))
 		return
 	}
 	if len(senders) == 0 {
@@ -480,6 +498,17 @@ func (s *manage) isSpam(client *client.QQClient, m *message.GroupMessage) bool {
 	return float64(from)/float64(len(history)) > s.spamThreshold
 }
 
+func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRecalledEvent) {
+	recallMsgId := e.MessageId
+	// check in cache
+	m, ok := s.messageCache.Get(recallMsgId)
+	if ok {
+		s._lastRecallMessageMu.Lock()
+		s.lastRecallMessage = m
+		s._lastRecallMessageMu.Unlock()
+	}
+}
+
 func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 	if s.rules.AllowVisit(m.Sender.Uin) {
 		return
@@ -533,7 +562,7 @@ func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword 
 		return err
 	}
 	if item.Msg != "" {
-		c.SendGroupMessage(groupCode, message.NewSendingMessage().Append(message.NewText(item.Msg)))
+		c.SendGroupMessage(groupCode, utils.NewTextMessage(item.Msg))
 	}
 	return nil
 }

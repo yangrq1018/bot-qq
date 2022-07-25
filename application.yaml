@@ -19,6 +19,7 @@ modules:
     spam_msgs: 20
     spam_threshold: 0.8
     mute_duration: 1m
+    message_cache_time: 1m
     approve_friend_request: true
     keyword_reply:
       "(csgo服务器|(csgo)?社区服)": "控制台: connect csgo.yangruoqi.site; password bailan"

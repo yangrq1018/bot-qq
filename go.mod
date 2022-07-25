@@ -8,8 +8,10 @@ replace (
 )
 
 require (
+	github.com/Code-Hex/go-generics-cache v1.0.1
 	github.com/Logiase/MiraiGo-Template v0.0.0-20220412065005-27063e73adf8
 	github.com/Mrs4s/MiraiGo v0.0.0-20220624121427-e26832b72d44
+	github.com/fsnotify/fsnotify v1.5.3
 	github.com/go-co-op/gocron v1.14.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/sirupsen/logrus v1.8.1
@@ -25,7 +27,6 @@ require (
 	github.com/RomiChan/protobuf v0.1.1-0.20220624030127-3310cba9dbc0 // indirect
 	github.com/RomiChan/syncx v0.0.0-20220404072119-d7ea0ae15a4c // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.5.3 // indirect
 	github.com/fumiama/imgsz v0.0.2 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
@@ -65,7 +66,7 @@ require (
 	github.com/yudeguang/iox v0.0.0-20180519090448-bffdb29c87c0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
-	golang.org/x/exp v0.0.0-20220218215828-6cf2b201936e // indirect
+	golang.org/x/exp v0.0.0-20220328175248-053ad81199eb // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	golang.org/x/text v0.3.7 // indirect

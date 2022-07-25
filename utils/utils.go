@@ -7,9 +7,8 @@ import (
 	"github.com/zyedidia/generic/hashset"
 )
 
-func TextMessage(text string) *message.SendingMessage {
-	msg := message.NewSendingMessage()
-	return msg.Append(message.NewText(text))
+func NewTextMessage(text string) *message.SendingMessage {
+	return message.NewSendingMessage().Append(message.NewText(text))
 }
 
 func PermissionString(p client.MemberPermission) string {
