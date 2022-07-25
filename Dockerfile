@@ -19,6 +19,6 @@ FROM alpine:latest
 # for time.LoadLocation
 RUN apk add --no-cache ca-certificates tzdata libc6-compat libgcc libstdc++
 # the trailing slash is a must for .json to get copied to directory /etc/jerry/
-COPY --from=builder /robot /src/application.yaml /src/device.json /
+COPY --from=builder /robot /src/device.json /
 
 ENTRYPOINT ["/robot"]
