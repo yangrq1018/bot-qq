@@ -105,7 +105,7 @@ func (s *manage) Init() {
 
 	// the call must be before WatchConfig()
 	config.GlobalConfig.OnConfigChange(func(in fsnotify.Event) {
-		logger.Infof("the config file has changed, name=%s", in.Name)
+		logger.Infof("the config file has changed, op=%s, name=%s", in.Op.String(), in.Name)
 		s.configLock.Lock()
 		s.privateChatList = utils.Int64Set(config.GlobalConfig.GetIntSlice("modules." + moduleName + ".private_chat_list"))
 		s.configLock.Unlock()
@@ -222,19 +222,24 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 		}
 		cmd, args := command(text)
 		switch cmd {
-		case "/clear":
+		case "/ping":
+			client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("pong"))
 		case "/emby":
 			s.creatEmbyUser(client, msg)
-		case "/top":
+		case "/top", "/活跃成员":
 			s.sendStat(client, msg.GroupCode, 3)
-		case "/file":
+		case "/file", "/文件":
 			if len(args) > 0 {
 				err := s.uploadFileToGroup(client, msg.GroupCode, args[0])
 				if err != nil {
 					logger.Error(err)
 				}
 			}
-		case "/recall":
+		case "/recall", "/防撤回":
+			if msg.Sender.Uin != s.admin {
+				client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("你没有admin权限"))
+				return
+			}
 			s._lastRecallMessageMu.Lock()
 			if s.lastRecallMessage != nil {
 				m := s.lastRecallMessage
