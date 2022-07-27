@@ -32,6 +32,7 @@ import (
 
 // TODO: this is subject to pan.qq.come change
 const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
+const recallMsgLife = 60 * time.Minute
 
 var instanceManage *manage
 var pfRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
@@ -208,12 +209,12 @@ func (s *manage) Stop(_ *bot.Bot, wg *sync.WaitGroup) {
 func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessage) {
 	// 记录msg的发送者
 	s.addCounter(msg.Sender, msg.GroupCode, 1)
+	s.messageCache.Set(msg.Id, msg, cache.WithExpiration(s.messageCacheTime))
+
 	text := textOfGroupMessage(msg)
 	if text == nil {
 		return
 	}
-
-	s.messageCache.Set(msg.Id, msg, cache.WithExpiration(s.messageCacheTime))
 
 	if s.isToBot(msg) {
 		if k, ok := s.containKeyWord(text); ok {
@@ -244,12 +245,17 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 			if s.lastRecallMessage != nil {
 				m := s.lastRecallMessage
 				mTime := time.Unix(int64(m.Time), 0)
-				client.SendGroupMessage(m.GroupCode,
-					utils.NewTextMessage(
-						fmt.Sprintf("%s前，%s撤回了消息: %q",
-							time.Since(mTime),
-							m.Sender.DisplayName(),
-							textOfGroupMessage(m).Content)))
+				since := time.Since(mTime)
+				var sinceString string
+				if since.Seconds() < 60 {
+					sinceString = fmt.Sprintf("%.0f秒前", since.Seconds())
+				} else {
+					sinceString = fmt.Sprintf("%.0f分钟前", since.Minutes())
+				}
+				client.SendGroupMessage(m.GroupCode, utils.NewTextMessage(fmt.Sprintf("%s前，%s撤回了", sinceString, m.Sender.DisplayName())))
+				client.SendGroupMessage(m.GroupCode, &message.SendingMessage{
+					Elements: m.Elements,
+				})
 			} else {
 				client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("没有最近记录的撤回消息"))
 			}
@@ -511,9 +517,14 @@ func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRec
 	m, ok := s.messageCache.Get(recallMsgId)
 	if ok {
 		s._lastRecallMessageMu.Lock()
-		logger.Infof("recall message set to msg id=%d", m.Id)
+		// prolong message cache
+		s.messageCache.Set(m.Id, m, cache.WithExpiration(recallMsgLife))
+		logger.Infof("recall message set to msg id=%d, msg life prolong to %v", m.Id, recallMsgLife)
+		logger.Infof("# of messages in cache: %d", len(s.messageCache.Keys()))
 		s.lastRecallMessage = m
 		s._lastRecallMessageMu.Unlock()
+	} else {
+		logger.Warnf("recall message not found in cache: %d", recallMsgId)
 	}
 }
 
