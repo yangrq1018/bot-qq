@@ -236,7 +236,7 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 				}
 			}
 		case "/recall", "/防撤回":
-			if msg.Sender.Uin != s.admin {
+			if !s.admin.Has(msg.Sender.Uin) {
 				client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("你没有admin权限"))
 				return
 			}
@@ -250,6 +250,8 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 							time.Since(mTime),
 							m.Sender.DisplayName(),
 							textOfGroupMessage(m).Content)))
+			} else {
+				client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("没有最近记录的撤回消息"))
 			}
 			s._lastRecallMessageMu.Unlock()
 		}
@@ -509,6 +511,7 @@ func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRec
 	m, ok := s.messageCache.Get(recallMsgId)
 	if ok {
 		s._lastRecallMessageMu.Lock()
+		logger.Infof("recall message set to msg id=%d", m.Id)
 		s.lastRecallMessage = m
 		s._lastRecallMessageMu.Unlock()
 	}

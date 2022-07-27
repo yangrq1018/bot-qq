@@ -19,7 +19,7 @@ import (
 type base struct {
 	monitorGroups *hashset.Set[int64] // 监听群组，在Serve前初始化，目前支持从config.GlobalConfig读取
 	botUin        int64
-	admin         int64
+	admin         *hashset.Set[int64]
 }
 
 func (b *base) Init() {
@@ -31,7 +31,7 @@ func (b *base) Init() {
 	if b.botUin == 0 {
 		log.Fatal("must specify bot qq account")
 	}
-	b.admin = config.GlobalConfig.GetInt64("admin")
+	b.admin = utils.Int64Set(config.GlobalConfig.GetIntSlice("admin"))
 }
 
 // 只有@机器人的消息才会认为是发给bot的命令

@@ -7,7 +7,9 @@ bot:
 group_codes:
   - 852485822 # csgo
 save_token: true
-admin: 1284700603
+admin: 
+  - 1284700603
+  - 2935130658
 modules:
   manage:
     clear: "0 0 * * *"
