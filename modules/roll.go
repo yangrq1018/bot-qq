@@ -157,7 +157,6 @@ func (r *roll) startServer(c *client.QQClient, addr string) {
 				groups[i].MaxMemberCount = c.GroupList[i].MaxMemberCount
 			}
 			_ = json.NewEncoder(writer).Encode(&groups)
-			writer.WriteHeader(http.StatusOK)
 			return
 		} else {
 			logger.Error(err)
