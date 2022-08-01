@@ -51,6 +51,7 @@ type perfectWorldAccount struct {
 	EmailPassword string `bson:"emailPassword"`
 	EmailSite     string `bson:"emailSite"`
 	Mobile        string `bson:"mobile"`
+	FriendCode    string `bson:"friendCode"`
 }
 
 type manage struct {
@@ -223,6 +224,8 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 		}
 		cmd, args := command(text)
 		switch cmd {
+		case "":
+			logger.Warnf("no command found, original message is %s", text.Content)
 		case "/ping":
 			client.SendGroupMessage(msg.GroupCode, utils.NewTextMessage("pong"))
 		case "/emby":
@@ -252,7 +255,7 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 				} else {
 					sinceString = fmt.Sprintf("%.0f分钟前", since.Minutes())
 				}
-				client.SendGroupMessage(m.GroupCode, utils.NewTextMessage(fmt.Sprintf("%s前，%s撤回了", sinceString, m.Sender.DisplayName())))
+				client.SendGroupMessage(m.GroupCode, utils.NewTextMessage(fmt.Sprintf("%s，%s撤回了", sinceString, m.Sender.DisplayName())))
 				client.SendGroupMessage(m.GroupCode, &message.SendingMessage{
 					Elements: m.Elements,
 				})
@@ -300,8 +303,9 @@ func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Se
 邮箱:%s
 邮箱密码:%s
 邮箱网址:%s
-手机号:%s`,
-				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile))
+手机号:%s
+好友代码:%s`,
+				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile, a.FriendCode))
 			client.SendPrivateMessage(sender.Uin, msg)
 		}
 	}
@@ -399,7 +403,7 @@ func (s *manage) addCounter(sender *message.Sender, groupCode, i int64) {
 
 func (s *manage) getPerfectWorldAccounts() ([]perfectWorldAccount, error) {
 	cur, err := s.database.Collection("perfectworld").
-		Find(s.ctx, bson.D{}, options.Find().SetSort(bson.M{"mobile": 1}))
+		Find(s.ctx, bson.D{}, options.Find().SetSort(bson.M{"friendCode": 1}))
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +517,7 @@ func (s *manage) isSpam(client *client.QQClient, m *message.GroupMessage) bool {
 
 func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRecalledEvent) {
 	recallMsgId := e.MessageId
-	// check in cache
+	// TODO: fix recall too fast, before the message is received by bot
 	m, ok := s.messageCache.Get(recallMsgId)
 	if ok {
 		s._lastRecallMessageMu.Lock()
