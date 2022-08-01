@@ -52,6 +52,7 @@ type perfectWorldAccount struct {
 	EmailSite     string `bson:"emailSite"`
 	Mobile        string `bson:"mobile"`
 	FriendCode    string `bson:"friendCode"`
+	Nickname      string `bson:"nickname"`
 }
 
 type manage struct {
@@ -304,8 +305,10 @@ func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Se
 邮箱密码:%s
 邮箱网址:%s
 手机号:%s
-好友代码:%s`,
-				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile, a.FriendCode))
+好友代码:%s
+完美ID:%s`,
+				a.Account, a.Password, a.Email, a.EmailPassword, a.EmailSite, a.Mobile, a.FriendCode, a.Nickname,
+			))
 			client.SendPrivateMessage(sender.Uin, msg)
 		}
 	}
