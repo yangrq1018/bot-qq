@@ -35,7 +35,7 @@ const remoteFolder = "/3f5cbf44-8f5c-4d2f-b559-21a100e471d5"
 const recallMsgLife = 60 * time.Minute
 
 var instanceManage *manage
-var pfRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
+var pwRegex = regexp.MustCompile(`完美(账号)?(\d+)?$`)
 
 type userMessageCount struct {
 	Uin       int64  `bson:"uin"`
@@ -270,12 +270,12 @@ func (s *manage) handleCommand(client *client.QQClient, msg *message.GroupMessag
 
 func (s *manage) handlePrivateOrTemp(client *client.QQClient, sender *message.Sender, txt *message.TextElement) {
 	if s.canPrivateChat(sender) {
-		tokens := pfRegex.FindStringSubmatch(txt.Content)
+		tokens := pwRegex.FindStringSubmatch(txt.Content)
 		if tokens == nil {
 			return
 		}
 		match, seq := tokens[0], tokens[2]
-		accounts, err := s.getPerfectWorldAccounts()
+		accounts, err := s.getPWAccounts()
 		if err != nil {
 			logger.Error(err)
 			return
@@ -404,7 +404,7 @@ func (s *manage) addCounter(sender *message.Sender, groupCode, i int64) {
 	}
 }
 
-func (s *manage) getPerfectWorldAccounts() ([]perfectWorldAccount, error) {
+func (s *manage) getPWAccounts() ([]perfectWorldAccount, error) {
 	cur, err := s.database.Collection("perfectworld").
 		Find(s.ctx, bson.D{}, options.Find().SetSort(bson.M{"friendCode": 1}))
 	if err != nil {

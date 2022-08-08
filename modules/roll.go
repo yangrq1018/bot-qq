@@ -463,25 +463,32 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 	defer func() {
 		_ = cs.Close(r.ctx)
 	}()
+	logger.Infof("start listen to web source insert")
 	for cs.Next(r.ctx) {
 		var ce changeEvent
 		var re model.MongoEvent
 		_ = cs.Decode(&ce)
 		err = collection.FindOne(r.ctx, ce.DocumentKey).Decode(&re)
-		if err == nil && re.Source == "web" {
-			logger.Infof("a new web source mongo db document insert: %v", ce.DocumentKey.ID)
-			e := fromModel(&re)
-			go func() {
-				msg2 := r.notice(bot.QQClient, e, nil)
-				_, err = collection.UpdateOne(r.ctx, ce.DocumentKey, bson.M{"$set": bson.M{"msg_id": msg2.Id}})
-				if err != nil {
-					logger.Error(err)
-					return
-				}
-				r.drawLater(bot.QQClient, e.GroupCode, e)
-			}()
+		if err == nil {
+			logger.Infof("a new document insert: %v", ce.DocumentKey.ID)
+			if re.Source == "web" {
+				logger.Infof("a new web source mongo db document insert: %v", ce.DocumentKey.ID)
+				e := fromModel(&re)
+				go func() {
+					msg2 := r.notice(bot.QQClient, e, nil)
+					_, err = collection.UpdateOne(r.ctx, ce.DocumentKey, bson.M{"$set": bson.M{"msg_id": msg2.Id}})
+					if err != nil {
+						logger.Error(err)
+						return
+					}
+					r.drawLater(bot.QQClient, e.GroupCode, e)
+				}()
+			}
+		} else {
+			break
 		}
 	}
+	logger.Warn("the web source insert listen go routine stopped, err = %v", err)
 }
 
 func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.GroupMessage) *message.GroupMessage {
