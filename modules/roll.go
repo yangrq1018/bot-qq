@@ -96,8 +96,8 @@ func (r *roll) Start(bot *bot.Bot) {
 			logger.Fatal(err)
 		}
 
-		var e rollEvent
 		for cursor.Next(r.ctx) {
+			var e rollEvent
 			err = cursor.Decode(&e)
 			if err != nil {
 				logger.Error(err)
