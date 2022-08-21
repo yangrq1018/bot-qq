@@ -22,6 +22,7 @@ type MongoEvent struct {
 	MsgId          int32            `bson:"msg_id"`
 	GroupCode      int64            `bson:"group_code"`
 	GroupName      string           `bson:"group_name"`
+	WinnerCount    int              `bson:"winner_count"`
 	Participants   []message.Sender `bson:"participants"`
 }
 
@@ -57,8 +58,10 @@ func (r *MongoEvent) Find(ctx context.Context, c *mongo.Collection, groupCode in
 	return nil, true
 }
 
-func (r *MongoEvent) UpdateWinner(ctx context.Context, c *mongo.Collection, winner *message.Sender) {
-	_, err := c.UpdateOne(ctx, r.identity(), bson.M{"$set": bson.D{{"winner", winner}}})
+func (r *MongoEvent) AddWinner(ctx context.Context, c *mongo.Collection, winner message.Sender) {
+	_, err := c.UpdateOne(ctx,
+		r.identity(),
+		bson.M{"$push": bson.D{{"winner", winner}}})
 	if err != nil {
 		logger.Error(err)
 	}
