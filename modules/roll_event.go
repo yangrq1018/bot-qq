@@ -15,7 +15,7 @@ import (
 )
 
 type rollEvent struct {
-	model.ObjectID
+	model.ObjectID `bson:",inline"`
 
 	SenderID       int64     `bson:"sender_id"`
 	SenderNickname string    `bson:"sender_nickname"`
