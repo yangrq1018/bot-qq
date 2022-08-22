@@ -1,11 +1,9 @@
 package modules
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,10 +26,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const (
-	rollCommand = "/roll"
-)
-
 var (
 	instanceRoll *roll
 )
@@ -45,9 +39,11 @@ type roll struct {
 	ctx               context.Context
 	atAll             bool
 	backendServerAddr string
+	ctxMgr            map[string]context.CancelFunc // all operation on ctxMgr should hold _mu
+	_mu               sync.Mutex
 }
 
-func (r roll) MiraiGoModule() bot.ModuleInfo {
+func (r *roll) MiraiGoModule() bot.ModuleInfo {
 	return bot.ModuleInfo{
 		ID:       "roll",
 		Instance: instanceRoll,
@@ -58,6 +54,7 @@ func (r *roll) Init() {
 	r.base.Init()
 	r.rule = ratelimit.NewRule()
 	r.ctx = context.Background()
+	r.ctxMgr = make(map[string]context.CancelFunc)
 	r.database = mongoClient.Database("qq")
 
 	moduleConfig := config.GlobalConfig.Sub("modules.roll")
@@ -73,7 +70,7 @@ func (r *roll) Init() {
 	}
 }
 
-func (r roll) PostInit() {}
+func (r *roll) PostInit() {}
 
 func (r *roll) Serve(bot *bot.Bot) {
 	r.monitorGroups.Each(func(code int64) {
@@ -182,8 +179,11 @@ func replyMessage(msg *message.GroupMessage) *message.ReplyElement {
 	return nil
 }
 
-func (r *roll) persistRoll(event *rollEvent) {
-	event.Model().Insert(r.ctx, r.collection())
+func (r *roll) persistModel(event *rollEvent) {
+	model := event.Model()
+	model.ObjectID.ObjectID = primitive.NewObjectID() // get a new object ID here
+	model.Insert(r.ctx, r.collection())
+	event.ObjectID = model.ObjectID
 }
 
 func (r *roll) getRoll(groupCode int64, msgID int32) (*rollEvent, bool) {
@@ -192,7 +192,7 @@ func (r *roll) getRoll(groupCode int64, msgID int32) (*rollEvent, bool) {
 	if !ok || err != nil {
 		return nil, false
 	}
-	return fromModel(&data), true
+	return newRollEventFromModel(&data), true
 }
 
 func (r *roll) collection() *mongo.Collection {
@@ -218,9 +218,22 @@ func (r *roll) dispatch(client *client.QQClient, msg *message.GroupMessage) {
 	}
 	if r.isToBot(msg) {
 		if text := textOfGroupMessage(msg); text != nil {
-			cmd, _ := command(text)
+			cmd, args := command(text)
 			switch cmd {
-			case rollCommand:
+			case "/cancel":
+				if len(args) < 1 {
+					return
+				}
+				objectID := strings.TrimPrefix(args[0], "#")
+				r._mu.Lock()
+				if cancel, ok := r.ctxMgr[objectID]; ok {
+					logger.Infof("called cancel func of %s", objectID)
+					cancel()
+					delete(r.ctxMgr, objectID)
+					// don't delete object in database, for now
+				}
+				r._mu.Unlock()
+			case "/roll":
 				go func() {
 					if !r.rule.AllowVisit(msg.Sender.Uin) {
 						replyToGroupMessage(client, msg, "您的抽奖操作过于频繁，请稍后再试")
@@ -253,181 +266,27 @@ func isAdmin(qqc *client.QQClient, groupCode, uin int64) bool {
 	return admins.Has(uin)
 }
 
-type rollEvent struct {
-	SenderID       int64     `bson:"sender_id"`
-	SenderNickname string    `bson:"sender_nickname"`
-	SkinName       string    `bson:"skin_name"`
-	DrawTime       time.Time `bson:"draw_time"`
-	MsgId          int32     `bson:"msg_id"`
-	GroupCode      int64     `bson:"group_code"`
-	GroupName      string    `bson:"group_name"`
-	WinnerCount    int       `bson:"winner_count"`
-
-	participants *hashset.Set[message.Sender] `bson:"-"`
-	_mu          sync.Mutex                   `bson:"-"`
-}
-
-func fromModel(m *model.MongoEvent) *rollEvent {
-	r := newRollEvent()
-	r.SenderID = m.SenderID
-	r.SenderNickname = m.SenderNickname
-	r.SkinName = m.SkinName
-	r.DrawTime = m.DrawTime
-	r.MsgId = m.MsgId
-	r.GroupCode = m.GroupCode
-	r.GroupName = m.GroupName
-	r.WinnerCount = m.WinnerCount
-	for _, p := range m.Participants {
-		r.participants.Put(p)
-	}
-	return r
-}
-
-func newRollEvent() *rollEvent {
-	e := new(rollEvent)
-	e.participants = hashset.New(0, func(a, b message.Sender) bool {
-		return a.Uin == b.Uin
-	}, func(t message.Sender) uint64 {
-		return uint64(t.Uin)
-	})
-	return e
-}
-
-// msg is assumed to contain text element(s)
-func parseMessage(msg *message.GroupMessage) *rollEvent {
-	event := newRollEvent()
-	event.MsgId = msg.Id
-	event.SenderID = msg.Sender.Uin
-	event.SenderNickname = msg.Sender.DisplayName()
-	event.GroupCode = msg.GroupCode
-	event.GroupName = msg.GroupName
-
-	content := textOfGroupMessage(msg).Content
-	// use scanner for consistency across platforms
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	var i int // line number
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch i {
-		case 1:
-			// 物品名称
-			event.SkinName = strings.TrimSpace(line)
-		case 2:
-			// 开奖时间
-			line = strings.TrimSpace(line)
-			switch line {
-			case "now":
-				event.DrawTime = time.Now()
-			default:
-				if drawTime, err := time.ParseInLocation("2006-01-02 15:04", line, time.Local); err != nil {
-					logger.Errorf("failed to parse draw time: %v", line)
-				} else {
-					event.DrawTime = drawTime
-				}
-			}
-		case 0:
-			// ignore
-		default:
-			// provide an optional list of initial participants
-			event.participants.Put(message.Sender{
-				Uin:      -int64(i), // fake at
-				Nickname: strings.TrimSpace(line),
-			})
-			logger.WithField("identity", event.identity()).Infof("add participant (by nickname) %q", strings.TrimSpace(line))
-		}
-		i++
-	}
-	event.WinnerCount = 1
-	return event
-}
-
-func (e *rollEvent) AddParticipant(sender *message.Sender) {
-	e._mu.Lock()
-	e.participants.Put(*sender)
-	e._mu.Unlock()
-}
-
-func (e *rollEvent) GroupNotice() string {
-	return fmt.Sprintf(`老板%s即将roll一个 %q
-开奖时间%s
-回复上条消息（任意内容）以参加抽奖`,
-		e.SenderNickname, e.SkinName, e.DrawTime.Format("2006-01-02 15:04 -0700 MST"))
-}
-
-func (e *rollEvent) Participants() []message.Sender {
-	return e.participants.Values()
-}
-
-// 开奖
-// 如果设置的开奖人数少于或等于当前人数，则返回全部参与者
-// 否则一直抽取胜者只到达到开奖人数
-// hold the lock
-func (e *rollEvent) Draw() []message.Sender {
-	e._mu.Lock()
-	defer e._mu.Unlock()
-	nParticipants := e.participants.Size()
-	if nParticipants == 0 {
-		return nil
-	}
-
-	nWinner := e.WinnerCount
-	if nWinner == 0 {
-		nWinner = 1
-	}
-
-	if nWinner >= nParticipants {
-		return e.Participants()
-	}
-
-	pool := e.participants.Copy()
-	var winners []message.Sender
-	for len(winners) < nWinner {
-		winner := pool.Values()[rand.Intn(pool.Size())]
-		winners = append(winners, winner)
-		pool.Remove(winner)
-	}
-	return winners
-}
-
-func (e *rollEvent) noticeRollWinnerMessage(winner *message.Sender) *message.SendingMessage {
-	text := fmt.Sprintf(`恭喜用户%q(qq号码%d)抽中了奖品%q!`, winner.DisplayName(), winner.Uin, e.SkinName)
-	msg := message.NewSendingMessage()
-	// At元素必须在第一个
-	if winner.Uin > 0 {
-		msg.Append(message.NewAt(winner.Uin))
-	}
-	return msg.Append(message.NewText(text))
-}
-
-func (e *rollEvent) identity() bson.M {
-	return bson.M{"group_code": e.GroupCode, "msg_id": e.MsgId}
-}
-
-func (e *rollEvent) Model() *model.MongoEvent {
-	e2 := &model.MongoEvent{
-		SenderID:       e.SenderID,
-		SenderNickname: e.SenderNickname,
-		SkinName:       e.SkinName,
-		DrawTime:       e.DrawTime,
-		MsgId:          e.MsgId,
-		GroupCode:      e.GroupCode,
-		GroupName:      e.GroupName,
-		WinnerCount:    e.WinnerCount,
-		Participants:   []message.Sender{},
-	}
-	e.participants.Each(func(sender message.Sender) {
-		e2.Participants = append(e2.Participants, sender)
-	})
-	return e2
-}
-
 func (r *roll) drawLater(client *client.QQClient, groupCode int64, event *rollEvent) {
 	// wait until draw time
+	ctx, cancel := context.WithCancel(r.ctx)
+	defer cancel()
+	r._mu.Lock()
+	r.ctxMgr[event.ShortHexID()] = cancel
+	r._mu.Unlock()
+
 	after := time.Until(event.DrawTime)
-	en := logger.WithField("identity", event.identity()).
+	en := logger.
+		WithField("identity", event.identity()).
+		WithField("object_id", event.ShortHexID()).
 		WithField("after", after)
 	en.Infof("draw %q", event.SkinName)
-	<-time.After(after)
+	select {
+	case <-time.After(after):
+	case <-ctx.Done():
+		en.Infof("cancelled")
+		client.SendGroupMessage(groupCode, utils.NewTextMessage("取消#"+event.ShortHexID()))
+		return
+	}
 
 	// refresh participants from database
 	e, ok := r.getRoll(event.GroupCode, event.MsgId)
@@ -444,16 +303,16 @@ func (r *roll) drawLater(client *client.QQClient, groupCode int64, event *rollEv
 	winners := event.Draw()
 	for i, w := range winners {
 		en.Infof("draw the [%d]-th winner: %d(%s)", i, w.Uin, w.DisplayName())
-		e.Model().AddWinner(r.ctx, r.collection(), w)
+		e.Model().AddWinner(ctx, r.collection(), w)
 		client.SendGroupMessage(groupCode, event.noticeRollWinnerMessage(&w))
 	}
 }
 
 // 启动一个抽奖事件
 func (r *roll) rollCSGOSkin(client *client.QQClient, msg *message.GroupMessage) error {
-	event := parseMessage(msg)
+	event := newRollEventFromMessage(msg)
+	r.persistModel(event)
 	r.notice(client, event, msg)
-	r.persistRoll(event)
 	// 创建群公告
 	if r.groupNotice {
 		err := client.AddGroupNoticeSimple(msg.GroupCode, event.GroupNotice())
@@ -503,7 +362,7 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 			logger.Infof("a new document insert: %v", ce.DocumentKey.ID)
 			if re.Source == "web" {
 				logger.Infof("a new web source mongo db document insert: %v", ce.DocumentKey.ID)
-				e := fromModel(&re)
+				e := newRollEventFromModel(&re)
 				go func() {
 					msg2 := r.notice(bot.QQClient, e, nil)
 					_, err = collection.UpdateOne(r.ctx, ce.DocumentKey, bson.M{"$set": bson.M{"msg_id": msg2.Id}})
@@ -524,12 +383,13 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.GroupMessage) *message.GroupMessage {
 	if msg == nil {
 		text2 := fmt.Sprintf(
-			`确认创建抽奖（来源Web），回复本条任意内容以参加！
+			`#%s
+确认创建抽奖(来源Web)，回复本条任意内容以参加!
 即将抽取奖品:%q 
 开奖时间:%s
 发起人:%s
 奖品数量:%d
-`, event.SkinName, event.DrawTime.In(time.Local).Format("01月02日 15:04"), event.SenderNickname, event.WinnerCount)
+`, event.ObjectID.ShortHexID(), event.SkinName, event.DrawTime.In(time.Local).Format("01月02日 15:04"), event.SenderNickname, event.WinnerCount)
 		msg2 := message.NewSendingMessage()
 		if r.atAll {
 			msg2.Append(message.NewAt(0, ""))
@@ -543,12 +403,13 @@ func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.Gr
 		return msg2Res
 	} else {
 		text2 := fmt.Sprintf(
-			`确认创建抽奖，回复上条消息（精华消息）任意内容以参加！
+			`#%s
+确认创建抽奖，回复上条消息（精华消息）任意内容以参加！
 即将抽取奖品:%q 
 开奖时间:%s
 发起人:%s
 奖品数量:%d
-`, event.SkinName, event.DrawTime.Format("01月02日 15:04"), event.SenderNickname, event.WinnerCount)
+`, event.ShortHexID(), event.SkinName, event.DrawTime.Format("01月02日 15:04"), event.SenderNickname, event.WinnerCount)
 		msg2 := message.NewSendingMessage()
 		if r.atAll {
 			msg2.Append(message.NewAt(0, ""))
