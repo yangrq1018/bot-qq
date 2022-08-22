@@ -412,6 +412,7 @@ func (e *rollEvent) Model() *model.MongoEvent {
 		MsgId:          e.MsgId,
 		GroupCode:      e.GroupCode,
 		GroupName:      e.GroupName,
+		WinnerCount:    e.WinnerCount,
 		Participants:   []message.Sender{},
 	}
 	e.participants.Each(func(sender message.Sender) {
