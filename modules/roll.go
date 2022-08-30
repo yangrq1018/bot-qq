@@ -338,7 +338,9 @@ type documentKey struct {
 	ID primitive.ObjectID `bson:"_id"`
 }
 
+// this is not a reliable method
 func (r *roll) webSourceInsert(bot *bot.Bot) {
+reconnect:
 	collection := r.collection()
 	// specify a pipeline that will only match "insert" events
 	// specify the MaxAwaitTimeOption to have each attempt wait two seconds for new documents
@@ -349,9 +351,11 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 		logger.Error(err)
 		return
 	}
-	defer func() {
+
+	cleanup := func() {
 		_ = cs.Close(r.ctx)
-	}()
+	}
+	defer cleanup()
 	logger.Infof("start listen to web source insert")
 	for cs.Next(r.ctx) {
 		var ce changeEvent
@@ -377,7 +381,10 @@ func (r *roll) webSourceInsert(bot *bot.Bot) {
 			break
 		}
 	}
-	logger.Warn("the web source insert listen go routine stopped, err = %v", err)
+	logger.Warn("the web source insert listen go routine stopped, err = %v", cs.Err())
+	cleanup()
+	logger.Info("reconnecting...")
+	goto reconnect
 }
 
 func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.GroupMessage) *message.GroupMessage {
