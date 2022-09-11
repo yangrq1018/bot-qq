@@ -105,5 +105,7 @@ func (a *antiSpam) isSpam(client *client.QQClient, m *message.GroupMessage) bool
 		}
 	}
 	// 如果超过阈值百分比的消息来自一个人，认为刷屏
-	return float64(from)/float64(len(history)) > a.spamThreshold
+	ratio := float64(from) / float64(len(history))
+	// logger.Infof("the antispam ratio is %d/%d", from, len(history))
+	return ratio > a.spamThreshold
 }
