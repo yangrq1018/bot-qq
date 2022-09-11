@@ -11,7 +11,7 @@
             "mode": "auto",
             "program": "${workspaceRoot}/main.go",
             "env": {
-                "MONGO_URI": "mongodb+srv://martin:ByyYSSEieTnSuD6k@cluster0.wvjww.mongodb.net/myFirstDatabase?retryWrites=true&w=majority",
+                "MONGO_URI": "mongodb://qqbot:qqbot@39.108.10.209:27017/?authMechanism=SCRAM-SHA-1&authSource=qq",
                 "QQ_GROUP_WELCOME_URI": "https://s1.ax1x.com/2022/05/17/O4zLAU.png"
             }
         }

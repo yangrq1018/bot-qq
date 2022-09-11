@@ -57,8 +57,8 @@ modules:
   erotic:
     url: "https://api.lolicon.app/setu/v2"
   spam:
-    spam_duration: 60s
-    spam_msgs: 20
-    spam_threshold: 0.8
-    mute_duration: 1m
-    mute_multiplier: 2
+    guard_duration: 60s # 在过去60s内
+    allow: 10 # 放行成员的10条消息
+    spam_threshold: 0.8 # 在第11条消息，触发antispam，检查最近的allow条消息，超过0.8时，封禁
+    mute_duration: 1m # 1分钟
+    mute_multiplier: 2 # 之后的每一次触发封禁提高一倍封禁时间

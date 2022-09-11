@@ -17,12 +17,12 @@ var instanceSpam *antiSpam
 
 type antiSpam struct {
 	base
-	spamMsgInterval int
-	spamThreshold   float64
-	rules           *ratelimit.Rule
-	muteDuration    time.Duration // TODO dynamic mute duration
-	muteMultiplier  int
-	mutedCache      *cache.Cache[int64, time.Duration]
+	allowMsgs      int
+	spamThreshold  float64
+	rules          *ratelimit.Rule
+	muteDuration   time.Duration
+	muteMultiplier int
+	mutedCache     *cache.Cache[int64, time.Duration]
 }
 
 func (a *antiSpam) MiraiGoModule() bot.ModuleInfo {
@@ -41,8 +41,8 @@ func (a *antiSpam) Init() {
 	moduleName := a.MiraiGoModule().ID.Name()
 	moduleConfig := config.GlobalConfig.Sub("modules." + moduleName)
 	if moduleConfig != nil {
-		a.spamMsgInterval = moduleConfig.GetInt("spam_msgs")
-		a.rules.AddRule(moduleConfig.GetDuration("spam_duration"), a.spamMsgInterval)
+		a.allowMsgs = moduleConfig.GetInt("allow")
+		a.rules.AddRule(moduleConfig.GetDuration("guard_duration"), a.allowMsgs)
 		a.spamThreshold = moduleConfig.GetFloat64("spam_threshold")
 		a.muteDuration = moduleConfig.GetDuration("mute_duration")
 		a.muteMultiplier = moduleConfig.GetInt("mute_multiplier")
@@ -78,11 +78,11 @@ func (a *antiSpam) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 		}
 		// repeatedly spam the group, increase that
 		logger.Infof("try to mute member %s for %s", m.Sender.DisplayName(), duration)
+		a.mutedCache.Set(m.Sender.Uin, duration, cache.WithExpiration(24*time.Hour))
 		if err := muteGroupMember(client, m, duration); err != nil {
 			logger.Error(err)
 			return
 		}
-		a.mutedCache.Set(m.Sender.Uin, duration, cache.WithExpiration(24*time.Hour))
 		replyToGroupMessage(client, m, fmt.Sprintf("%s发送消息太过频繁，已被禁言%d分钟", m.Sender.DisplayName(), int(duration.Minutes())))
 	}
 }
@@ -94,7 +94,7 @@ func (a *antiSpam) isSpam(client *client.QQClient, m *message.GroupMessage) bool
 		return false
 	}
 	// parameter here
-	history, err := client.GetGroupMessages(m.GroupCode, g.LastMsgSeq-int64(a.spamMsgInterval), g.LastMsgSeq)
+	history, err := client.GetGroupMessages(m.GroupCode, g.LastMsgSeq-int64(a.allowMsgs), g.LastMsgSeq)
 	if err != nil {
 		return false
 	}
@@ -106,6 +106,6 @@ func (a *antiSpam) isSpam(client *client.QQClient, m *message.GroupMessage) bool
 	}
 	// 如果超过阈值百分比的消息来自一个人，认为刷屏
 	ratio := float64(from) / float64(len(history))
-	// logger.Infof("the antispam ratio is %d/%d", from, len(history))
+	logger.Debugf("the antispam ratio is %d/%d", from, len(history))
 	return ratio > a.spamThreshold
 }
