@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
@@ -478,7 +477,7 @@ func (s *manage) creatEmbyUser(client *client.QQClient, msg *message.GroupMessag
 	}
 	if res.StatusCode != http.StatusOK {
 		var textError []byte
-		textError, _ = ioutil.ReadAll(res.Body)
+		textError, _ = io.ReadAll(res.Body)
 		replyToGroupMessage(client, msg, fmt.Sprintf("server response: %d %s", res.StatusCode, textError))
 		return
 	}

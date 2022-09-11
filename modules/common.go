@@ -6,7 +6,9 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"sync"
 
+	"github.com/Logiase/MiraiGo-Template/bot"
 	"github.com/Logiase/MiraiGo-Template/config"
 	"github.com/Mrs4s/MiraiGo/client"
 	"github.com/Mrs4s/MiraiGo/message"
@@ -16,10 +18,17 @@ import (
 	"github.com/zyedidia/generic/hashset"
 )
 
+// base implements bot.Module barely
 type base struct {
 	monitorGroups *hashset.Set[int64] // 监听群组，在Serve前初始化，目前支持从config.GlobalConfig读取
 	botUin        int64
 	admin         *hashset.Set[int64]
+}
+
+func (*base) MiraiGoModule() bot.ModuleInfo {
+	return bot.ModuleInfo{
+		ID: "implement me",
+	}
 }
 
 func (b *base) Init() {
@@ -33,6 +42,14 @@ func (b *base) Init() {
 	}
 	b.admin = utils.Int64Set(config.GlobalConfig.GetIntSlice("admin"))
 }
+
+func (*base) PostInit() {}
+
+func (*base) Serve(bot *bot.Bot) {}
+
+func (*base) Start(bot *bot.Bot) {}
+
+func (*base) Stop(bot *bot.Bot, wg *sync.WaitGroup) {}
 
 // 只有@机器人的消息才会认为是发给bot的命令
 // 注意复制消息不会复制底层的AtElement，需要手动输入

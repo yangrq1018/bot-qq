@@ -28,11 +28,13 @@ func init() {
 	instanceErotic = new(erotic)
 	instanceManage = new(manage)
 	instanceSpam = new(antiSpam)
+	instanceSuper = new(super)
 
 	bot.RegisterModule(instanceRoll)
 	bot.RegisterModule(instanceErotic)
 	bot.RegisterModule(instanceManage)
 	bot.RegisterModule(instanceSpam)
+	bot.RegisterModule(instanceSuper)
 
 	_mongoClient, err := mongodb.NewClient(os.Getenv("MONGO_URI"), os.Getenv("MONGO_PROXY"))
 	if err != nil {
