@@ -10,7 +10,7 @@ services:
       TZ: "Asia/Shanghai"
       http_proxy: http://172.17.0.1:7890
       https_proxy: http://172.17.0.1:7890
-      MONGO_URI: mongodb+srv://martin:ByyYSSEieTnSuD6k@cluster0.wvjww.mongodb.net/myFirstDatabase?retryWrites=true&w=majority
+      MONGO_URI: mongodb://qqbot:qqbot@39.108.10.209:27017/?authMechanism=SCRAM-SHA-1&authSource=qq
       MONGO_PROXY: 172.17.0.1:7890
       QQ_GROUP_WELCOME_URI: https://s1.ax1x.com/2022/05/17/O4zLAU.png
     build:
