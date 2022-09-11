@@ -1,6 +1,6 @@
 bot:
   # 账号
-  account: 1284700603
+  account: 1562167435
   # 密码
   password:
   loginmethod: qrcode
@@ -40,6 +40,12 @@ modules:
       - 2935130658 # Kali
       - 727229837 # s1mple
       - 3417858507 # 吴彦祖
+      - 1528779187 # 顺遂
+      - 624918326 # 老张
+      - 1577992396 # 彩虹马
+      - 2778706039 # 四叶
+      - 1733469675 # 翔子
+      - 2498879160 # 阿拉斯托
   roll:
     group_notice: false
     at_all: false

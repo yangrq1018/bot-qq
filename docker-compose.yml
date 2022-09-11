@@ -1,6 +1,7 @@
 version: '3'
 services:
   robot:
+    image: yangrq1018/bot-qq
     container_name: "qq-bot-instance"
     volumes:
       - "/home/xlc1/bot-config:/config"

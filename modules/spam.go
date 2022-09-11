@@ -77,6 +77,7 @@ func (a *antiSpam) antiSpam(client *client.QQClient, m *message.GroupMessage) {
 			duration *= time.Duration(a.muteMultiplier)
 		}
 		// repeatedly spam the group, increase that
+		logger.Infof("try to mute member %s for %s", m.Sender.DisplayName(), duration)
 		if err := muteGroupMember(client, m, duration); err != nil {
 			logger.Error(err)
 			return
