@@ -18,10 +18,6 @@ modules:
       - 852485822
     emby: http://emby.yangruoqi.site:8096
     emby_token: 907edf3821ca42528c775f69435fcbec
-    spam_duration: 60s
-    spam_msgs: 20
-    spam_threshold: 0.8
-    mute_duration: 1m
     message_cache_time: 1m
     approve_friend_request: true
     keyword_reply:
@@ -54,3 +50,9 @@ modules:
       times: 3
   erotic:
     url: "https://api.lolicon.app/setu/v2"
+  spam:
+    spam_duration: 60s
+    spam_msgs: 20
+    spam_threshold: 0.8
+    mute_duration: 1m
+    mute_multiplier: 2

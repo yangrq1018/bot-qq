@@ -34,7 +34,7 @@ func init() {
 
 	_mongoClient, err := mongodb.NewClient(os.Getenv("MONGO_URI"), os.Getenv("MONGO_PROXY"))
 	if err != nil {
-		logger.Errorf("failed to create mongo client: %v", err)
+		logger.Fatalf("failed to create mongo client: %v", err)
 	}
 	mongoClient = _mongoClient
 }

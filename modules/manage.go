@@ -23,7 +23,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-co-op/gocron"
 	"github.com/yangrq1018/botqq/utils"
-	"github.com/yudeguang/ratelimit"
 	"github.com/zyedidia/generic/hashset"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -59,17 +58,14 @@ type manage struct {
 	base
 	database *mongo.Database
 	ctx      context.Context
-	rules    *ratelimit.Rule
 
-	sendTime             string
-	clearTime            string
-	embyURL              string
-	embyToken            string
-	spamThreshold        float64
-	muteDuration         time.Duration // TODO dynamic mute duration
+	sendTime  string
+	clearTime string
+	embyURL   string
+	embyToken string
+
 	messageCacheTime     time.Duration
 	notifyGroups         []int
-	spamMsgInterval      int
 	approveFriendRequest bool
 	fileDict             map[string]fileSearch
 	keywordReplyDict     map[string]string
@@ -99,7 +95,6 @@ func (s *manage) Init() {
 
 	s.ctx = context.Background()
 	s.database = mongoClient.Database("qq")
-	s.rules = ratelimit.NewRule()
 	s.fileDict = make(map[string]fileSearch)
 	moduleName := s.MiraiGoModule().ID.Name()
 	moduleConfig := config.GlobalConfig.Sub("modules." + moduleName)
@@ -116,10 +111,6 @@ func (s *manage) Init() {
 	})
 
 	if moduleConfig != nil {
-		s.spamMsgInterval = moduleConfig.GetInt("spam_msgs")
-		s.rules.AddRule(moduleConfig.GetDuration("spam_duration"), s.spamMsgInterval)
-		s.spamThreshold = moduleConfig.GetFloat64("spam_threshold")
-		s.muteDuration = moduleConfig.GetDuration("mute_duration")
 		s.sendTime = moduleConfig.GetString("send")
 		s.clearTime = moduleConfig.GetString("clear")
 		s.embyURL = moduleConfig.GetString("emby")
@@ -150,7 +141,6 @@ func (s *manage) PostInit() {}
 func (s *manage) Serve(bot *bot.Bot) {
 	s.monitorGroups.Each(func(code int64) {
 		registerMessageListener(code, s.handleCommand, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
-		registerMessageListener(code, s.antiSpam, &bot.GroupMessageEvent, &bot.SelfGroupMessageEvent)
 		registerGroupMessageRecallListener(code, s.listenRecall, &bot.GroupMessageRecalledEvent)
 		registerGroupMemberJoinListener(code, handleNewMemberJoin, &bot.GroupMemberJoinEvent)
 		registerGroupMemberLeaveListener(code, handleMemberLeave, &bot.GroupMemberLeaveEvent)
@@ -170,11 +160,11 @@ func (s *manage) Serve(bot *bot.Bot) {
 	}
 
 	bot.GroupMemberPermissionChangedEvent.Subscribe(func(client *client.QQClient, event *client.MemberPermissionChangedEvent) {
-		old, new := utils.PermissionString(event.OldPermission), utils.PermissionString(event.NewPermission)
+		oldPem, newPem := utils.PermissionString(event.OldPermission), utils.PermissionString(event.NewPermission)
 		client.SendGroupMessage(event.Group.Code, utils.NewTextMessage(fmt.Sprintf(`【%s】的权限从%s被修改为%s`,
 			event.Member.DisplayName(),
-			old,
-			new,
+			oldPem,
+			newPem,
 		)))
 	})
 }
@@ -497,27 +487,6 @@ func (s *manage) creatEmbyUser(client *client.QQClient, msg *message.GroupMessag
 	replyToGroupMessage(client, msg, fmt.Sprintf("EMBY：成功创建用户，用户名为QQ号码，默认密码为空，请登录%s修改密码和观影", s.embyURL))
 }
 
-// 判断刷屏逻辑
-func (s *manage) isSpam(client *client.QQClient, m *message.GroupMessage) bool {
-	g, err := client.GetGroupInfo(m.GroupCode)
-	if err != nil {
-		return false
-	}
-	// parameter here
-	history, err := client.GetGroupMessages(m.GroupCode, g.LastMsgSeq-int64(s.spamMsgInterval), g.LastMsgSeq)
-	if err != nil {
-		return false
-	}
-	var from int
-	for _, msg := range history {
-		if msg.Sender.Uin == m.Sender.Uin {
-			from++
-		}
-	}
-	// 如果超过阈值百分比的消息来自一个人，认为刷屏
-	return float64(from)/float64(len(history)) > s.spamThreshold
-}
-
 func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRecalledEvent) {
 	recallMsgId := e.MessageId
 	// TODO: fix recall too fast, before the message is received by bot
@@ -532,22 +501,6 @@ func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRec
 		s._lastRecallMessageMu.Unlock()
 	} else {
 		logger.Warnf("recall message not found in cache: %d", recallMsgId)
-	}
-}
-
-func (s *manage) antiSpam(client *client.QQClient, m *message.GroupMessage) {
-	if s.rules.AllowVisit(m.Sender.Uin) {
-		return
-	}
-
-	// check if this user is spamming the group
-	if s.isSpam(client, m) {
-		logger.Infof("mute member %s: spam message %q", m.Sender.Nickname, m.ToString())
-		if err := muteGroupMember(client, m, s.muteDuration); err != nil {
-			logger.Error(err)
-			return
-		}
-		replyToGroupMessage(client, m, fmt.Sprintf("您发送消息太过频繁，已被禁言%d分钟", int(s.muteDuration.Minutes())))
 	}
 }
 
@@ -599,7 +552,7 @@ func (s *manage) uploadFileToGroup(c *client.QQClient, groupCode int64, keyword 
 func muteGroupMember(client *client.QQClient, m *message.GroupMessage, d time.Duration) error {
 	g, err := client.GetGroupInfo(m.GroupCode)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to mute member: %v", err)
 	}
 	g.Members, _ = client.GetGroupMembers(g)
 	member := g.FindMember(m.Sender.Uin)
