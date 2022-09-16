@@ -37,7 +37,7 @@ type MongoEvent struct {
 	SkinName       string           `bson:"skin_name" json:"skinName"`
 	DrawTime       time.Time        `bson:"draw_time" json:"drawDate"`
 	Source         string           `bson:"source"`
-	MsgId          int32            `bson:"msg_id"`
+	MsgID          int32            `bson:"msg_id"`
 	GroupCode      int64            `bson:"group_code"`
 	GroupName      string           `bson:"group_name"`
 	WinnerCount    int              `bson:"winner_count"`
@@ -45,7 +45,7 @@ type MongoEvent struct {
 }
 
 func (r *MongoEvent) identity() bson.M {
-	return bson.M{"group_code": r.GroupCode, "msg_id": r.MsgId}
+	return bson.M{"group_code": r.GroupCode, "msg_id": r.MsgID}
 }
 
 func (r *MongoEvent) Insert(ctx context.Context, c *mongo.Collection) {

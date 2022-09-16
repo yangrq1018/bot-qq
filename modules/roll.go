@@ -289,7 +289,7 @@ func (r *roll) drawLater(client *client.QQClient, groupCode int64, event *rollEv
 	}
 
 	// refresh participants from database
-	e, ok := r.getRoll(event.GroupCode, event.MsgId)
+	e, ok := r.getRoll(event.GroupCode, event.MsgID)
 	if !ok {
 		return
 	} else {
@@ -406,7 +406,7 @@ func (r *roll) notice(client *client.QQClient, event *rollEvent, msg *message.Gr
 
 		// set essential
 		_ = client.SetEssenceMessage(event.GroupCode, msg2Res.Id, msg2Res.InternalId)
-		event.MsgId = msg2Res.Id
+		event.MsgID = msg2Res.Id
 		return msg2Res
 	} else {
 		text2 := fmt.Sprintf(

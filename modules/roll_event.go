@@ -21,7 +21,7 @@ type rollEvent struct {
 	SenderNickname string    `bson:"sender_nickname"`
 	SkinName       string    `bson:"skin_name"`
 	DrawTime       time.Time `bson:"draw_time"`
-	MsgId          int32     `bson:"msg_id"`
+	MsgID          int32     `bson:"msg_id"`
 	GroupCode      int64     `bson:"group_code"`
 	GroupName      string    `bson:"group_name"`
 	WinnerCount    int       `bson:"winner_count"`
@@ -48,7 +48,7 @@ func newRollEventFromModel(m *model.MongoEvent) *rollEvent {
 	r.SenderNickname = m.SenderNickname
 	r.SkinName = m.SkinName
 	r.DrawTime = m.DrawTime
-	r.MsgId = m.MsgId
+	r.MsgID = m.MsgID
 	r.GroupCode = m.GroupCode
 	r.GroupName = m.GroupName
 	r.WinnerCount = m.WinnerCount
@@ -61,7 +61,7 @@ func newRollEventFromModel(m *model.MongoEvent) *rollEvent {
 // msg is assumed to contain text element(s)
 func newRollEventFromMessage(msg *message.GroupMessage) *rollEvent {
 	event := newRollEvent()
-	event.MsgId = msg.Id
+	event.MsgID = msg.Id
 	event.SenderID = msg.Sender.Uin
 	event.SenderNickname = msg.Sender.DisplayName()
 	event.GroupCode = msg.GroupCode
@@ -165,7 +165,7 @@ func (e *rollEvent) noticeRollWinnerMessage(winner *message.Sender) *message.Sen
 }
 
 func (e *rollEvent) identity() bson.M {
-	return bson.M{"group_code": e.GroupCode, "msg_id": e.MsgId}
+	return bson.M{"group_code": e.GroupCode, "msg_id": e.MsgID}
 }
 
 func (e *rollEvent) Model() *model.MongoEvent {
@@ -175,7 +175,7 @@ func (e *rollEvent) Model() *model.MongoEvent {
 		SenderNickname: e.SenderNickname,
 		SkinName:       e.SkinName,
 		DrawTime:       e.DrawTime,
-		MsgId:          e.MsgId,
+		MsgID:          e.MsgID,
 		GroupCode:      e.GroupCode,
 		GroupName:      e.GroupName,
 		WinnerCount:    e.WinnerCount,

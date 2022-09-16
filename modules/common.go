@@ -1,3 +1,4 @@
+// Package modules is the bot qq command modules definition
 package modules
 
 import (

@@ -28,7 +28,6 @@ func (s *super) Serve(bot *bot.Bot) {
 func (s *super) handle(client *client.QQClient, e *message.GroupMessage) {
 	if s.admin.Has(e.Sender.Uin) {
 		// enable super mode, send log messages to chat
-		// logrus.StandardLogger().AddHook()
-		_ = 1
+		logger.Infof("Enter super admin mode, instructed by %s", e.Sender.DisplayName())
 	}
 }

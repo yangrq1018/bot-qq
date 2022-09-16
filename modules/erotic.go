@@ -82,7 +82,7 @@ func (s *erotic) handleCmd(client *client.QQClient, msg *message.GroupMessage) e
 		Data  []struct {
 			Pid        int      `json:"pid"`
 			P          int      `json:"p"`
-			Uid        int      `json:"uid"`
+			UID        int      `json:"uid"`
 			Title      string   `json:"title"`
 			Author     string   `json:"author"`
 			R18        bool     `json:"r18"`

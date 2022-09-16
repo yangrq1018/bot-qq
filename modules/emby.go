@@ -11,10 +11,10 @@ const (
 // UserDto represents an EMBY user
 type UserDto struct {
 	Name                      string    `json:"Name"`
-	ServerId                  string    `json:"ServerId"`
+	ServerID                  string    `json:"ServerId"`
 	Prefix                    string    `json:"Prefix"`
 	DateCreated               time.Time `json:"DateCreated"`
-	Id                        string    `json:"Id"`
+	ID                        string    `json:"Id"`
 	HasPassword               bool      `json:"HasPassword"`
 	HasConfiguredPassword     bool      `json:"HasConfiguredPassword"`
 	HasConfiguredEasyPassword bool      `json:"HasConfiguredEasyPassword"`

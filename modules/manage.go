@@ -483,13 +483,13 @@ func (s *manage) creatEmbyUser(client *client.QQClient, msg *message.GroupMessag
 	}
 	var user UserDto
 	_ = json.NewDecoder(res.Body).Decode(&user)
-	replyToGroupMessage(client, msg, fmt.Sprintf("EMBY：成功创建用户，用户名为QQ号码，默认密码为空，请登录%s修改密码和观影", s.embyURL))
+	replyToGroupMessage(client, msg, fmt.Sprintf("EMBY: 成功创建用户，用户名为QQ号码，默认密码为空，请登录%s修改密码和观影", s.embyURL))
 }
 
 func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRecalledEvent) {
-	recallMsgId := e.MessageId
+	recallMsgID := e.MessageId
 	// TODO: fix recall too fast, before the message is received by bot
-	m, ok := s.messageCache.Get(recallMsgId)
+	m, ok := s.messageCache.Get(recallMsgID)
 	if ok {
 		s._lastRecallMessageMu.Lock()
 		// prolong message cache
@@ -499,7 +499,7 @@ func (s *manage) listenRecall(client *client.QQClient, e *client.GroupMessageRec
 		s.lastRecallMessage = m
 		s._lastRecallMessageMu.Unlock()
 	} else {
-		logger.Warnf("recall message not found in cache: %d", recallMsgId)
+		logger.Warnf("recall message not found in cache: %d", recallMsgID)
 	}
 }
 

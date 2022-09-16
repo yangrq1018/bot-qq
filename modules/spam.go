@@ -17,12 +17,14 @@ var instanceSpam *antiSpam
 
 type antiSpam struct {
 	base
+	// max number of msgs allowed in guard_duration
+	// also the lookback window
 	allowMsgs      int
 	spamThreshold  float64
-	rules          *ratelimit.Rule
 	muteDuration   time.Duration
 	muteMultiplier int
 	mutedCache     *cache.Cache[int64, time.Duration]
+	rules          *ratelimit.Rule
 }
 
 func (a *antiSpam) MiraiGoModule() bot.ModuleInfo {
@@ -106,6 +108,5 @@ func (a *antiSpam) isSpam(client *client.QQClient, m *message.GroupMessage) bool
 	}
 	// 如果超过阈值百分比的消息来自一个人，认为刷屏
 	ratio := float64(from) / float64(len(history))
-	logger.Debugf("the antispam ratio is %d/%d", from, len(history))
 	return ratio > a.spamThreshold
 }
